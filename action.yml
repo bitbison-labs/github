@@ -1,0 +1,70 @@
+name: 'Bitbison'
+description: 'Bitbison total supply chain security'
+author: 'Bitbison'
+branding:
+  icon: 'shield'
+  color: 'purple'
+
+inputs:
+  channel:
+    description: >-
+      HTTPS release channel URL from your Bitbison user portal installation
+      guide. Store the entire URL as a secret.
+    required: true
+  token:
+    description: 'Build submission token. Store as a secret.'
+    required: true
+  instance:
+    description: 'HTTPS instance URL from your Bitbison user portal installation guide.'
+    required: true
+  mode:
+    description: >-
+      'dynamic': use an existing agent or install one for the job.
+      'standalone': use a preinstalled agent to capture only this job.
+    required: false
+    default: 'dynamic'
+  label:
+    description: 'Optional label for the build.'
+    required: false
+  npm-spans:
+    description: 'Enable npm lifecycle-script spans.'
+    required: false
+    default: 'true'
+  vite-spans:
+    description: 'Enable Vite/Rollup build-phase spans.'
+    required: false
+    default: 'true'
+  github-token:
+    description: 'GitHub token with actions: read. Defaults to the job token.'
+    required: false
+    default: ${{ github.token }}
+  matrix:
+    description: 'Matrix values of this job, as JSON. Defaults to the job matrix.'
+    required: false
+    default: ${{ toJSON(matrix) }}
+  job-index:
+    description: 'Index of this job in its matrix. Defaults to the job index.'
+    required: false
+    default: ${{ strategy.job-index }}
+  job-total:
+    description: 'Number of jobs in the matrix. Defaults to the job total.'
+    required: false
+    default: ${{ strategy.job-total }}
+  job-container:
+    description: 'The job container, as JSON. Defaults to the job context.'
+    required: false
+    default: ${{ toJSON(job.container) }}
+  job-services:
+    description: 'The job service containers, as JSON. Defaults to the job context.'
+    required: false
+    default: ${{ toJSON(job.services) }}
+  job-status:
+    description: 'The job status so far. Defaults to the job context.'
+    required: false
+    default: ${{ job.status }}
+
+runs:
+  using: 'node24'
+  pre: 'dist/pre.js'
+  main: 'dist/main.js'
+  post: 'dist/post.js'
