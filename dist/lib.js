@@ -52,6 +52,14 @@ async function bootstrap() {
   if (!url) { warn('`channel` input is required (your Bitbison release channel URL); capture skipped.'); return null; }
   if (!input('token')) { warn('`token` input is required; capture skipped.'); return null; }
   if (!input('instance')) { warn('`instance` input is required; capture skipped.'); return null; }
+  const installed = '/opt/bitbison/bin/buildguard';
+  try {
+    fs.accessSync(installed, fs.constants.X_OK);
+    saveState('bin', installed);
+    appendEnvFile('GITHUB_PATH', path.dirname(installed));
+    info('buildguard present on this runner.');
+    return installed;
+  } catch {}
   const channel = httpsURL(url);
   if (channel.search || channel.hash) throw new Error('channel URL must not contain a query or fragment');
   const instance = httpsURL(input('instance'));
@@ -79,6 +87,7 @@ async function bootstrap() {
     bin = path.join(dir, 'buildguard');
     fs.writeFileSync(bin, body, { mode: 0o700, flag: 'wx' });
     saveState('bin', bin);
+    appendEnvFile('GITHUB_PATH', dir);
   } catch {
     try { if (dir) fs.rmSync(dir, { recursive: true, force: true }); }
     catch {}
