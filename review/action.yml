@@ -25,9 +25,10 @@ inputs:
     required: true
   ci-token:
     description: >-
-      CI token for the reviewer, with the mcp/ci capability: it reads the
-      registry and the run's analysis report, never the organization's
-      runtime data. Store as a secret.
+      CI token for the reviewer. With mcp/ci/runtime the build review can
+      also follow a finding into the build's capture, through masked
+      views; with mcp/ci it reads the run's analysis report alone. Store
+      as a secret.
     required: true
   organization:
     description: 'Organization id from your Bitbison user portal. Not needed when channel is given.'

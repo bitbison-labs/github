@@ -77,8 +77,10 @@ if $grants; then
   tools="$tools,Bash(bitbison package:*),Bash(bitbison search:*),Bash(bitbison capture:*),Bash(bitbison report:*),Bash(bitbison grant:*),Bash(bitbison audit submit:*),Bash(bitbison requests:*)"
   tools="$tools,mcp__plugin_bitbison_bitbison__docs,mcp__plugin_bitbison_bitbison__dependency_history"
 else
-  # The CI MCP server's plain mount: the registry's tools, none of the
-  # organization's runtime data. Listing tools spends no allowance.
+  # The CI MCP server: the runtime mount when the token has it, which adds
+  # build_query over the masked audit views of the organization's CI
+  # builds, else the plain one, the registry's tools alone. Listing tools
+  # spends no allowance.
   probe() {
     curl -sS --proto '=https' --max-time 30 -o /dev/null -w '%{http_code}' -X POST "$instance/mcp/ci/$1" \
       -H "Authorization: Bearer $CI_TOKEN" \
@@ -88,12 +90,19 @@ else
       -A bitbison-github-action \
       -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' 2> /dev/null
   }
-  [ "$(probe builds)" = 200 ] || skip "the CI token was refused"
-  jq -n --arg url "$instance/mcp/ci/builds" --arg auth "Bearer $CI_TOKEN" \
+  if [ "$(probe runtime)" = 200 ]; then
+    mount=runtime
+  elif [ "$(probe builds)" = 200 ]; then
+    mount=builds
+  else
+    skip "the CI token was refused"
+  fi
+  jq -n --arg url "$instance/mcp/ci/$mount" --arg auth "Bearer $CI_TOKEN" \
     '{mcpServers: {bitbison: {type: "http", url: $url, headers: {Authorization: $auth}}}}' \
     > "$dir/mcp.json" || skip "could not write the MCP configuration"
   mcp="--mcp-config $dir/mcp.json"
   tools="$tools,mcp__bitbison__docs,mcp__bitbison__dependency_history,mcp__bitbison__package,mcp__bitbison__search_packages,mcp__bitbison__package_report,mcp__bitbison__package_status"
+  [ "$mount" = runtime ] && tools="$tools,mcp__bitbison__build_query"
 fi
 
 {
