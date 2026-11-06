@@ -2,6 +2,7 @@
 # The run's Bitbison build, its analysis waited for, and the build review's
 # prompt; nothing when the run had no Bitbison build.
 set -uo pipefail
+. "$(dirname "$0")/prompt.sh"
 
 skip() { echo "::warning::bitbison: $1; review skipped."; echo "ok=false" >> "$GITHUB_OUTPUT"; exit 0; }
 
@@ -20,10 +21,5 @@ fi
 jq -e '.analyzed' > /dev/null <<< "$out" ||
   echo "::warning::bitbison: the analysis of build $(jq -r .build <<< "$out") had not landed after $WAIT_MINUTES minutes"
 
-delimiter="BITBISON_$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
-{
-  echo "ok=true"
-  echo "prompt<<$delimiter"
-  jq -r '.prompt // empty' <<< "$out"
-  echo "$delimiter"
-} >> "$GITHUB_OUTPUT"
+echo "ok=true" >> "$GITHUB_OUTPUT"
+prompt_output "$(jq -r '.prompt // empty' <<< "$out")"

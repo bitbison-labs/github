@@ -53,9 +53,7 @@ requests from forks are not reviewed.
    - With the build integration, `BITBISON_INSTANCE` and `BITBISON_CHANNEL`
      are already there. Without it, add `BITBISON_INSTANCE` (your instance
      URL) and `BITBISON_ORGANIZATION` (your organization id).
-3. Install the [Claude GitHub App](https://github.com/apps/claude) on the
-   repository.
-4. Add this workflow and merge it:
+3. Add this workflow and merge it:
 
 ```yaml
 name: Bitbison review
@@ -99,8 +97,10 @@ Under `with:`:
   place of a stored key.
 - `wait-minutes`: how long the build review waits for the analysis (15).
 
-To run a review in a job of your own, use `bitbison-labs/github/review` as a step;
-its inputs are in [`review/action.yml`](review/action.yml).
+The reviews comment as `github-actions[bot]`, with the job token. To run a
+review in a job of your own, use `bitbison-labs/github/review` as a step; its
+inputs are in [`review/action.yml`](review/action.yml), among them
+`github-token`: a GitHub App's token there makes the comments that app's.
 
 Repository code is licensed under [Apache-2.0](LICENSE). Downloaded Bitbison
 components are covered by their own terms.

@@ -2,6 +2,7 @@
 # The pull request's direct dependency changes through what the grant
 # workflow settles without a model, and the prompt for what is left.
 set -uo pipefail
+. "$(dirname "$0")/prompt.sh"
 
 skip() { echo "::warning::bitbison: $1; review skipped."; echo "ok=false" >> "$GITHUB_OUTPUT"; exit 0; }
 
@@ -21,12 +22,9 @@ jq -e 'has("changes")' > /dev/null 2>&1 <<< "$out" ||
   skip "bitbison ci dependencies failed: $(jq -r '.error // empty' <<< "$out" 2> /dev/null)$(head -c 300 "$DIR/ci.err")"
 echo "bitbison: $(jq -r '"\(.changes) direct dependency change(s), \(.uncovered) uncovered, \(.submodules) submodule change(s)"' <<< "$out")"
 
-delimiter="BITBISON_$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
 {
   echo "ok=true"
   echo "changes=$(jq -r .changes <<< "$out")"
   echo "submodules=$(jq -r .submodules <<< "$out")"
-  echo "prompt<<$delimiter"
-  jq -r '.prompt // empty' <<< "$out"
-  echo "$delimiter"
 } >> "$GITHUB_OUTPUT"
+prompt_output "$(jq -r '.prompt // empty' <<< "$out")"
