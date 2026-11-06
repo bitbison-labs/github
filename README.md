@@ -40,8 +40,9 @@ requests from forks are not reviewed.
 ### Setup
 
 1. In your Bitbison user portal, have an administrator create a CI token for
-   the reviewer, with the `mcp/ci/runtime` capability (a token with `mcp/ci`
-   alone does the dependency review but not the build review).
+   the reviewer, with the `mcp/ci` capability. It reads the registry and each
+   run's analysis report, requests grants and submits audits as an agent, and
+   reads none of your organization's runtime data.
 2. Add secrets to the repository or its organization:
    - `BITBISON_CI_TOKEN`: the CI token.
    - `ANTHROPIC_API_KEY`: a Claude API key, or `CLAUDE_CODE_OAUTH_TOKEN`, or
