@@ -11,6 +11,17 @@ for secret in "$CI_TOKEN" "$CHANNEL" "$ANTHROPIC_API_KEY" "$CLAUDE_CODE_OAUTH_TO
   [ -n "$secret" ] && echo "::add-mask::$secret"
 done
 
+# The vulnerability review's threshold: off, or the least severity Claude
+# is asked about; true and false read as high and off.
+case ${VULNERABILITIES:-off} in
+  true) VULNERABILITIES=high ;;
+  false | "") VULNERABILITIES=off ;;
+  off | critical | high | medium | low) ;;
+  *)
+    echo "::error::bitbison: vulnerabilities must be off, critical, high, medium or low, not '$VULNERABILITIES'"
+    exit 1
+    ;;
+esac
 # The build review also gates a push's or a dispatched run's build; the
 # dependency review is a pull request's alone.
 if [ "$REVIEW" = build ]; then
@@ -89,7 +100,7 @@ case $REVIEW in
   dependencies)
     tools="$tools,mcp__github_inline_comment__create_inline_comment"
     # The opt-in vulnerability review reads the code: search, then read.
-    [ "${VULNERABILITIES:-false}" = true ] && tools="$tools,Read,Grep,Glob"
+    [ "$VULNERABILITIES" != off ] && tools="$tools,Read,Grep,Glob"
     ;;
   build)
     # The analysis reads the change (a push has no pull request) and
@@ -105,7 +116,7 @@ if $grants; then
   plugins="bitbison@bitbison"
   tools="$tools,Bash(bitbison package:*),Bash(bitbison search:*),Bash(bitbison capture:*),Bash(bitbison report:*),Bash(bitbison grant:*),Bash(bitbison audit submit:*),Bash(bitbison requests:*)"
   tools="$tools,mcp__plugin_bitbison_bitbison__docs,mcp__plugin_bitbison_bitbison__dependency_history"
-  [ "${VULNERABILITIES:-false}" = true ] && tools="$tools,Bash(bitbison advisories:*)"
+  [ "$VULNERABILITIES" != off ] && tools="$tools,Bash(bitbison advisories:*)"
 else
   # The CI MCP server: the runtime mount when the token has it, which adds
   # build_query over the masked audit views of the organization's CI
@@ -145,4 +156,5 @@ fi
   echo "args=$mcp${MODEL:+ --model $MODEL}${schema:+ --json-schema '$schema'}"
   echo "tools=$tools"
   echo "dir=$dir"
+  echo "vulnerabilities=$VULNERABILITIES"
 } >> "$GITHUB_OUTPUT"

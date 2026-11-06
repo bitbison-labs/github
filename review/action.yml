@@ -68,12 +68,14 @@ inputs:
     default: 'false'
   vulnerabilities:
     description: >-
-      The dependency review: Claude also judges whether the advisories of
-      the direct dependencies the pull request adds or upgrades are
-      relevant to this code base, and names the way out (opt-in). The
-      summary lists those advisories either way.
+      The dependency review: the least severity at which Claude also judges
+      whether the advisories of the direct dependencies the pull request
+      adds or upgrades are relevant to this code base, and names the way
+      out: critical, high, medium or low (an unrated advisory counts as
+      low); 'off' never asks it. 'true' is high, 'false' is off. The
+      summary lists every advisory either way.
     required: false
-    default: 'false'
+    default: 'off'
   pull-request:
     description: 'The pull request to review. Defaults to the one the event names.'
     required: false
@@ -195,7 +197,7 @@ runs:
         DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         WAIT_MINUTES: ${{ inputs.wait-minutes }}
         GIT_REF: ${{ inputs.git-ref }}
-        VULNERABILITIES: ${{ inputs.vulnerabilities }}
+        VULNERABILITIES: ${{ steps.setup.outputs.vulnerabilities }}
       run: bash "$GITHUB_ACTION_PATH/$REVIEW.sh"
 
     # A runner that keeps its home keeps the plugin it installed: the

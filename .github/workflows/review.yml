@@ -30,10 +30,10 @@ on:
         required: false
         default: false
       vulnerabilities:
-        description: 'The dependency review: Claude also judges whether the direct changes'' advisories are relevant to this code base (opt-in).'
-        type: boolean
+        description: 'The dependency review: off, or the least severity (critical, high, medium, low) at which Claude judges whether the direct changes'' advisories are relevant to this code base.'
+        type: string
         required: false
-        default: false
+        default: 'off'
       wait-minutes:
         description: 'How long the build review waits for the analysis of the build.'
         type: number

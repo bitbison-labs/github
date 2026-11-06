@@ -30,10 +30,11 @@ echo "bitbison: $(jq -r '"\(.changes) direct dependency change(s), \(.uncovered)
 prompt=$(jq -r '.prompt // empty' <<< "$out")
 # Opt-in: the direct changes' advisories, and the relevance review's
 # prompt beside the dependency review's when any carries one.
-if [ "${VULNERABILITIES:-false}" = true ]; then
-  vout=$(sh "$LAUNCHER" --json ci vulnerabilities --state "$DIR/dependencies.json" 2>> "$DIR/ci.err") || true
+if [ "${VULNERABILITIES:-off}" != off ]; then
+  vout=$(sh "$LAUNCHER" --json ci vulnerabilities --state "$DIR/dependencies.json" \
+    --threshold "$VULNERABILITIES" 2>> "$DIR/ci.err") || true
   if jq -e 'has("vulnerable")' > /dev/null 2>&1 <<< "$vout"; then
-    echo "bitbison: $(jq -r .vulnerable <<< "$vout") direct dependency change(s) with an advisory"
+    echo "bitbison: $(jq -r '"\(.vulnerable) direct dependency change(s) with an advisory, \(.asked) at \(.threshold) or above"' <<< "$vout")"
     vprompt=$(jq -r '.prompt // empty' <<< "$vout")
     [ -n "$vprompt" ] && prompt="${prompt:+$prompt$'\n\n'}$vprompt"
   else
