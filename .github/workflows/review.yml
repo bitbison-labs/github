@@ -1,0 +1,146 @@
+name: Bitbison review
+
+# Call it from a workflow with two triggers: pull_request, for the dependency
+# review, and workflow_run of the workflows that build under Bitbison (or
+# every workflow), for the build review. Neither holds up the pull request or
+# fails it.
+
+on:
+  workflow_call:
+    inputs:
+      instance:
+        description: 'HTTPS instance URL, when there is no BITBISON_INSTANCE secret.'
+        type: string
+        required: false
+      organization:
+        description: 'Organization id, when there is no BITBISON_ORGANIZATION or BITBISON_CHANNEL secret.'
+        type: string
+        required: false
+      dependency-grants:
+        description: >-
+          The dependency review follows the Bitbison grant workflow (an inquiry
+          for each release, a grant requested where the facts settle it, the
+          check); false: it only reads.
+        type: boolean
+        required: false
+        default: true
+      fail-on-uncovered:
+        description: 'The dependency review fails the job when a change is left uncovered; by default it only reports.'
+        type: boolean
+        required: false
+        default: false
+      wait-minutes:
+        description: 'How long the build review waits for the analysis of the build.'
+        type: number
+        required: false
+        default: 15
+      runs-on:
+        description: 'The runner, as JSON: a label ("ubuntu-latest"), labels (["self-hosted", "linux"]) or a group ({"group": "reviewers"}).'
+        type: string
+        required: false
+        default: '"ubuntu-latest"'
+      model:
+        description: 'The Claude model to review with. Defaults to claude-code-action''s.'
+        type: string
+        required: false
+      anthropic-federation-rule-id:
+        description: 'Workload identity federation rule (fdrl_...), in place of a stored Claude key.'
+        type: string
+        required: false
+      anthropic-organization-id:
+        description: 'Anthropic organization UUID, for workload identity federation.'
+        type: string
+        required: false
+      anthropic-service-account-id:
+        description: 'Service account (svac_...) the federated token acts as.'
+        type: string
+        required: false
+      anthropic-workspace-id:
+        description: 'Workspace (wrkspc_...) for workload identity federation.'
+        type: string
+        required: false
+    secrets:
+      BITBISON_INSTANCE:
+        required: false
+      BITBISON_CHANNEL:
+        required: false
+      BITBISON_ORGANIZATION:
+        required: false
+      BITBISON_CI_TOKEN:
+        required: false
+      ANTHROPIC_API_KEY:
+        required: false
+      CLAUDE_CODE_OAUTH_TOKEN:
+        required: false
+
+permissions: {}
+
+jobs:
+  dependencies:
+    # A pull request from a fork gets no secrets, and is not reviewed.
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+    steps:
+      # The pull request's branch, which its lockfiles, the requests and the
+      # check name. The checkout's credential fetches the base, and the
+      # review removes it before Claude starts.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.head_ref }}
+      - uses: bitbison-labs/github/review@6728a73e108333789f309ff6ec5385688619e7ad
+        with:
+          review: dependencies
+          grants: ${{ inputs.dependency-grants }}
+          fail-on-uncovered: ${{ inputs.fail-on-uncovered }}
+          instance: ${{ inputs.instance || secrets.BITBISON_INSTANCE }}
+          organization: ${{ inputs.organization || secrets.BITBISON_ORGANIZATION }}
+          channel: ${{ secrets.BITBISON_CHANNEL }}
+          ci-token: ${{ secrets.BITBISON_CI_TOKEN }}
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude-code-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          anthropic-federation-rule-id: ${{ inputs.anthropic-federation-rule-id }}
+          anthropic-organization-id: ${{ inputs.anthropic-organization-id }}
+          anthropic-service-account-id: ${{ inputs.anthropic-service-account-id }}
+          anthropic-workspace-id: ${{ inputs.anthropic-workspace-id }}
+          model: ${{ inputs.model }}
+
+  build:
+    # A run of a pull request from this repository, not this workflow's own.
+    if: >-
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      github.event.workflow_run.name != github.workflow &&
+      github.event.workflow_run.conclusion != 'cancelled' &&
+      github.event.workflow_run.conclusion != 'skipped'
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+    steps:
+      # The default branch, never the pull request's code.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: bitbison-labs/github/review@6728a73e108333789f309ff6ec5385688619e7ad
+        with:
+          review: build
+          instance: ${{ inputs.instance || secrets.BITBISON_INSTANCE }}
+          organization: ${{ inputs.organization || secrets.BITBISON_ORGANIZATION }}
+          channel: ${{ secrets.BITBISON_CHANNEL }}
+          ci-token: ${{ secrets.BITBISON_CI_TOKEN }}
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude-code-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          anthropic-federation-rule-id: ${{ inputs.anthropic-federation-rule-id }}
+          anthropic-organization-id: ${{ inputs.anthropic-organization-id }}
+          anthropic-service-account-id: ${{ inputs.anthropic-service-account-id }}
+          anthropic-workspace-id: ${{ inputs.anthropic-workspace-id }}
+          model: ${{ inputs.model }}
+          wait-minutes: ${{ inputs.wait-minutes }}
