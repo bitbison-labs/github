@@ -24,11 +24,13 @@ two reviews:
   release, alternatives your organization already uses) and comments on it.
   One summary comment, kept up to date, says where every change stands and
   what a person must still decide.
-- **Build**, once a pull request's build has run under the
-  build integration above and
-  been analyzed. Claude reports what the build itself did: its verdict, its
-  findings, the hosts it reached, and what changed against the default
-  branch's build.
+- **Build**, once a build has run under the build integration above and
+  been analyzed: a report of what the build itself did (its verdict
+  against the default branch's, its findings, the hosts it connected to,
+  the packages an advisory names, what it produced), published on the
+  job's summary, and Claude's analysis when the build is not clean. As a
+  gate between a build and what depends on it, it can also stop a publish
+  (below).
 
 Neither review holds up a pull request or fails it unless you ask. Both run
 in jobs of their own, never on your build's runner, and only they hold the
@@ -96,6 +98,44 @@ Under `with:`:
   reached through workload identity federation with the job's OIDC token, in
   place of a stored key.
 - `wait-minutes`: how long the build review waits for the analysis (15).
+
+### Gate a publish on the build
+
+Put the gate between the build and what depends on it. It waits for the
+analysis of the run's build, publishes the report on its job's summary,
+and fails when the gate does, so a job that `needs` it does not run:
+
+```yaml
+jobs:
+  build:
+    # ... the build, under the build integration
+  bitbison:
+    needs: build
+    permissions:
+      contents: read
+      pull-requests: read
+      id-token: write
+    uses: bitbison-labs/github/.github/workflows/gate.yml@<commit>
+    with:
+      gate: agent
+    secrets: inherit
+  publish:
+    needs: [build, bitbison]
+    # ...
+```
+
+| `gate` | A clean build | A build that is not clean |
+|---|---|---|
+| `report` (default) | passes | passes, with the report |
+| `block` | passes | fails until a person accepts its findings with a policy, or the change removes them |
+| `agent` | passes | Claude decides whether what was flagged is a real risk: one fails, none passes, its reason for each finding on the summary |
+| `off` | does nothing | does nothing |
+
+Claude never runs on a clean build. On one that is not, `analysis: true`
+(the default) has Claude say what the build did, whether it is a real risk
+and what to do; `analysis: false` publishes the report alone (`gate:
+agent` needs the analysis). `on-timeout` is `pass` or `fail` when the
+analysis has not landed in `wait-minutes`.
 
 The reviews comment as `github-actions[bot]`, with the job token. To run a
 review in a job of your own, use `bitbison-labs/github/review` as a step; its

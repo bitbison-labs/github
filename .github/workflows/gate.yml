@@ -1,0 +1,127 @@
+name: Bitbison gate
+
+# Call it as a job between a workflow's build and what depends on it, with
+# needs: on both sides. It waits for the analysis of this run's Bitbison
+# build and publishes the report on the job's summary; the job fails when
+# the gate does, so a job that needs it does not run.
+#
+# gate: report (the default) publishes and passes; block fails on a build
+# that is not clean; agent lets Claude decide whether what was flagged is a
+# real risk; off does nothing. A clean build passes in every mode, and
+# Claude never runs on one.
+
+on:
+  workflow_call:
+    inputs:
+      gate:
+        description: 'off, report, block or agent.'
+        type: string
+        required: false
+        default: report
+      analysis:
+        description: 'Claude analyzes a build that is not clean: what it did, whether it is a real risk, what to do. gate: agent needs it.'
+        type: boolean
+        required: false
+        default: true
+      on-timeout:
+        description: 'pass or fail when the analysis has not landed in time; fail for block and agent, pass for report, by default.'
+        type: string
+        required: false
+      wait-minutes:
+        description: 'How long to wait for the analysis of the build.'
+        type: number
+        required: false
+        default: 15
+      instance:
+        description: 'HTTPS instance URL, when there is no BITBISON_INSTANCE secret.'
+        type: string
+        required: false
+      organization:
+        description: 'Organization id, when there is no BITBISON_ORGANIZATION or BITBISON_CHANNEL secret.'
+        type: string
+        required: false
+      runs-on:
+        description: 'The runner, as JSON: a label ("ubuntu-latest"), labels (["self-hosted", "linux"]) or a group ({"group": "reviewers"}).'
+        type: string
+        required: false
+        default: '"ubuntu-latest"'
+      model:
+        description: 'The Claude model to analyze with. Defaults to claude-code-action''s.'
+        type: string
+        required: false
+      anthropic-federation-rule-id:
+        description: 'Workload identity federation rule (fdrl_...), in place of a stored Claude key.'
+        type: string
+        required: false
+      anthropic-organization-id:
+        description: 'Anthropic organization UUID, for workload identity federation.'
+        type: string
+        required: false
+      anthropic-service-account-id:
+        description: 'Service account (svac_...) the federated token acts as.'
+        type: string
+        required: false
+      anthropic-workspace-id:
+        description: 'Workspace (wrkspc_...) for workload identity federation.'
+        type: string
+        required: false
+    secrets:
+      BITBISON_INSTANCE:
+        required: false
+      BITBISON_CHANNEL:
+        required: false
+      BITBISON_ORGANIZATION:
+        required: false
+      BITBISON_CI_TOKEN:
+        required: false
+      ANTHROPIC_API_KEY:
+        required: false
+      CLAUDE_CODE_OAUTH_TOKEN:
+        required: false
+    outputs:
+      passed:
+        description: 'Whether the gate passed the build.'
+        value: ${{ jobs.gate.outputs.passed }}
+
+permissions: {}
+
+jobs:
+  gate:
+    name: Bitbison
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
+    permissions:
+      contents: read
+      pull-requests: read
+      id-token: write
+    outputs:
+      passed: ${{ steps.review.outputs.passed }}
+    steps:
+      # The commit the run built, for the analysis to read the change; its
+      # code is never run here.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - id: review
+        uses: bitbison-labs/github/review@master
+        with:
+          review: build
+          gate: ${{ inputs.gate }}
+          analysis: ${{ inputs.analysis }}
+          on-timeout: ${{ inputs.on-timeout }}
+          wait-minutes: ${{ inputs.wait-minutes }}
+          run-id: ${{ github.run_id }}
+          run-attempt: ${{ github.run_attempt }}
+          git-ref: ${{ github.ref }}
+          pull-request: ${{ github.event.pull_request.number }}
+          instance: ${{ inputs.instance || secrets.BITBISON_INSTANCE }}
+          organization: ${{ inputs.organization || secrets.BITBISON_ORGANIZATION }}
+          channel: ${{ secrets.BITBISON_CHANNEL }}
+          ci-token: ${{ secrets.BITBISON_CI_TOKEN }}
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude-code-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          anthropic-federation-rule-id: ${{ inputs.anthropic-federation-rule-id }}
+          anthropic-organization-id: ${{ inputs.anthropic-organization-id }}
+          anthropic-service-account-id: ${{ inputs.anthropic-service-account-id }}
+          anthropic-workspace-id: ${{ inputs.anthropic-workspace-id }}
+          model: ${{ inputs.model }}

@@ -11,7 +11,26 @@ for secret in "$CI_TOKEN" "$CHANNEL" "$ANTHROPIC_API_KEY" "$CLAUDE_CODE_OAUTH_TO
   [ -n "$secret" ] && echo "::add-mask::$secret"
 done
 
-if [ -z "$PR" ]; then
+# The build review also gates a push's or a dispatched run's build; the
+# dependency review is a pull request's alone.
+if [ "$REVIEW" = build ]; then
+  case ${GATE:-report} in
+    off)
+      note "gate is off; nothing to do."
+      echo "run=false" >> "$GITHUB_OUTPUT"
+      exit 0
+      ;;
+    report | block | agent) ;;
+    *)
+      echo "::error::bitbison: gate must be off, report, block or agent, not '$GATE'"
+      exit 1
+      ;;
+  esac
+  if [ "$GATE" = agent ] && [ "$ANALYSIS" != true ]; then
+    echo "::error::bitbison: gate 'agent' lets Claude decide, so it needs analysis: true"
+    exit 1
+  fi
+elif [ -z "$PR" ]; then
   note "not a pull request; nothing to review."
   echo "run=false" >> "$GITHUB_OUTPUT"
   exit 0
@@ -65,9 +84,15 @@ dir="${RUNNER_TEMP:-/tmp}/bitbison-review"
 mkdir -p "$dir" && chmod 700 "$dir"
 umask 077
 tools='Bash(gh pr diff:*),Bash(gh pr view:*)'
+schema=""
 case $REVIEW in
   dependencies) tools="$tools,mcp__github_inline_comment__create_inline_comment" ;;
-  build) tools="$tools,Bash(gh pr comment:*)" ;;
+  build)
+    # The analysis reads the change (a push has no pull request) and
+    # answers a verdict the gate reads; it comments on nothing.
+    tools="$tools,Bash(git show:*),Bash(git log:*),Bash(git diff:*)"
+    schema='{"type":"object","properties":{"decision":{"type":"string","enum":["real_risk","no_real_risk"]},"summary":{"type":"string"},"findings":{"type":"array","items":{"type":"object","properties":{"rule":{"type":"string"},"subject":{"type":"string"},"real_risk":{"type":"boolean"},"reason":{"type":"string"},"next":{"type":"string"}},"required":["rule","real_risk","reason","next"]}},"analysis":{"type":"string"}},"required":["decision","summary","findings","analysis"]}'
+    ;;
 esac
 plugins=""
 mcp=""
@@ -111,8 +136,8 @@ fi
   echo "instance=$instance"
   echo "marketplace=$marketplace"
   echo "plugins=$plugins"
-  echo "session=github:pr-$PR:$RUN_ID-$RUN_ATTEMPT:$REVIEW"
-  echo "args=$mcp${MODEL:+ --model $MODEL}"
+  echo "session=github:${PR:+pr-$PR:}$RUN_ID-$RUN_ATTEMPT:$REVIEW"
+  echo "args=$mcp${MODEL:+ --model $MODEL}${schema:+ --json-schema '$schema'}"
   echo "tools=$tools"
   echo "dir=$dir"
 } >> "$GITHUB_OUTPUT"

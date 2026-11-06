@@ -90,6 +90,34 @@ inputs:
     description: 'The build review: how long to wait for the analysis of the build.'
     required: false
     default: '15'
+  gate:
+    description: >-
+      The build review: what the job does with the build's analysis.
+      'report' publishes the report and passes; 'block' fails on a build
+      that is not clean, until a person accepts its findings with a
+      policy; 'agent' lets Claude decide whether what was flagged is a
+      real risk, failing on one; 'off' does nothing. A clean build passes
+      in every mode.
+    required: false
+    default: 'report'
+  analysis:
+    description: >-
+      The build review: Claude analyzes a build that is not clean (what it
+      did, whether it is a real risk, what to do); 'false' publishes the
+      report alone. Never runs on a clean build. gate 'agent' needs it.
+    required: false
+    default: 'true'
+  on-timeout:
+    description: >-
+      The build review: 'pass' or 'fail' when the analysis has not landed
+      by wait-minutes. Defaults to 'fail' for gate 'block' and 'agent',
+      'pass' for 'report'.
+    required: false
+    default: ''
+  git-ref:
+    description: 'The build review: the ref the run built. Defaults to the event''s, a pull request''s merge ref under workflow_run.'
+    required: false
+    default: ${{ github.event_name != 'workflow_run' && github.ref || '' }}
   github-token:
     description: >-
       GitHub token with pull-requests: write, which every comment of the
@@ -102,6 +130,9 @@ outputs:
   uncovered:
     description: 'The dependency review: how many changes no grant covers.'
     value: ${{ steps.summary.outputs.uncovered }}
+  passed:
+    description: 'The build review: whether the gate passed the build.'
+    value: ${{ steps.gate.outputs.passed }}
 
 runs:
   using: 'composite'
@@ -123,6 +154,8 @@ runs:
         FEDERATION_ORG: ${{ inputs.anthropic-organization-id }}
         MODEL: ${{ inputs.model }}
         PR: ${{ inputs.pull-request }}
+        GATE: ${{ inputs.gate }}
+        ANALYSIS: ${{ inputs.analysis }}
       run: bash "$GITHUB_ACTION_PATH/setup.sh"
 
     - id: client
@@ -152,6 +185,7 @@ runs:
         RUN_ATTEMPT: ${{ inputs.run-attempt }}
         DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         WAIT_MINUTES: ${{ inputs.wait-minutes }}
+        GIT_REF: ${{ inputs.git-ref }}
       run: bash "$GITHUB_ACTION_PATH/$REVIEW.sh"
 
     # A runner that keeps its home keeps the plugin it installed: the
@@ -164,7 +198,13 @@ runs:
             echo "::warning::bitbison: the installed Bitbison plugin could not be updated"
         fi
 
-    - if: steps.prepare.outputs.prompt != ''
+    # The dependency review's reviewer takes what the grant workflow left;
+    # the build review's analyzes a build that is not clean, when asked to
+    # or when it decides the gate.
+    - id: claude
+      if: >-
+        steps.prepare.outputs.prompt != '' &&
+        (inputs.review != 'build' || inputs.analysis == 'true' || inputs.gate == 'agent')
       uses: anthropics/claude-code-action@c0949c50a78c1ec8ce2647db36629b870e715d0c # v1.0.268
       env:
         BITBISON_URL: ${{ steps.setup.outputs.plugins != '' && steps.setup.outputs.instance || '' }}
@@ -199,3 +239,19 @@ runs:
         PR: ${{ inputs.pull-request }}
         FAIL_ON_UNCOVERED: ${{ inputs.fail-on-uncovered }}
       run: bash "$GITHUB_ACTION_PATH/summary.sh"
+
+    # The build review: the report and the analysis on the job's summary,
+    # and the gate's decision as the job's outcome.
+    - id: gate
+      if: always() && steps.prepare.outputs.ok == 'true' && inputs.review == 'build'
+      shell: bash
+      env:
+        GATE: ${{ inputs.gate }}
+        ON_TIMEOUT: ${{ inputs.on-timeout }}
+        BUILD: ${{ steps.prepare.outputs.build }}
+        CLEAN: ${{ steps.prepare.outputs.clean }}
+        ANALYZED: ${{ steps.prepare.outputs.analyzed }}
+        REPORT: ${{ steps.prepare.outputs.report }}
+        ANALYSIS: ${{ steps.claude.outputs.structured_output }}
+        CLAUDE: ${{ steps.claude.outcome }}
+      run: bash "$GITHUB_ACTION_PATH/gate.sh"
