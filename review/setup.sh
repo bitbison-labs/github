@@ -86,7 +86,11 @@ umask 077
 tools='Bash(gh pr diff:*),Bash(gh pr view:*)'
 schema=""
 case $REVIEW in
-  dependencies) tools="$tools,mcp__github_inline_comment__create_inline_comment" ;;
+  dependencies)
+    tools="$tools,mcp__github_inline_comment__create_inline_comment"
+    # The opt-in vulnerability review reads the code: search, then read.
+    [ "${VULNERABILITIES:-false}" = true ] && tools="$tools,Read,Grep,Glob"
+    ;;
   build)
     # The analysis reads the change (a push has no pull request) and
     # answers a verdict the gate reads; it comments on nothing.
@@ -101,6 +105,7 @@ if $grants; then
   plugins="bitbison@bitbison"
   tools="$tools,Bash(bitbison package:*),Bash(bitbison search:*),Bash(bitbison capture:*),Bash(bitbison report:*),Bash(bitbison grant:*),Bash(bitbison audit submit:*),Bash(bitbison requests:*)"
   tools="$tools,mcp__plugin_bitbison_bitbison__docs,mcp__plugin_bitbison_bitbison__dependency_history"
+  [ "${VULNERABILITIES:-false}" = true ] && tools="$tools,Bash(bitbison advisories:*)"
 else
   # The CI MCP server: the runtime mount when the token has it, which adds
   # build_query over the masked audit views of the organization's CI

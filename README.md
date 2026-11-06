@@ -89,6 +89,11 @@ Under `with:`:
   nothing.
 - `fail-on-uncovered: true`: the dependency review fails the job when a
   change is left uncovered.
+- `vulnerabilities: true`: Claude also judges whether the advisories of
+  the direct dependencies a pull request adds or upgrades are relevant to
+  your code (it searches before it reads) and names the way out: a fixed
+  version, an alternative your organization uses, or a mitigation. Off by
+  default; the summary lists those advisories either way.
 - `runs-on`: the reviews' runner, as JSON: `'["self-hosted", "linux"]'` or
   `'{"group": "reviewers"}'`. A self-hosted runner needs `curl`, `jq`, `gh`
   and `git`.

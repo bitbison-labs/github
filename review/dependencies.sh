@@ -27,4 +27,17 @@ echo "bitbison: $(jq -r '"\(.changes) direct dependency change(s), \(.uncovered)
   echo "changes=$(jq -r .changes <<< "$out")"
   echo "submodules=$(jq -r .submodules <<< "$out")"
 } >> "$GITHUB_OUTPUT"
-prompt_output "$(jq -r '.prompt // empty' <<< "$out")"
+prompt=$(jq -r '.prompt // empty' <<< "$out")
+# Opt-in: the direct changes' advisories, and the relevance review's
+# prompt beside the dependency review's when any carries one.
+if [ "${VULNERABILITIES:-false}" = true ]; then
+  vout=$(sh "$LAUNCHER" --json ci vulnerabilities --state "$DIR/dependencies.json" 2>> "$DIR/ci.err") || true
+  if jq -e 'has("vulnerable")' > /dev/null 2>&1 <<< "$vout"; then
+    echo "bitbison: $(jq -r .vulnerable <<< "$vout") direct dependency change(s) with an advisory"
+    vprompt=$(jq -r '.prompt // empty' <<< "$vout")
+    [ -n "$vprompt" ] && prompt="${prompt:+$prompt$'\n\n'}$vprompt"
+  else
+    echo "::warning::bitbison: bitbison ci vulnerabilities failed: $(head -c 300 "$DIR/ci.err")"
+  fi
+fi
+prompt_output "$prompt"

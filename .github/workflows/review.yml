@@ -29,6 +29,11 @@ on:
         type: boolean
         required: false
         default: false
+      vulnerabilities:
+        description: 'The dependency review: Claude also judges whether the direct changes'' advisories are relevant to this code base (opt-in).'
+        type: boolean
+        required: false
+        default: false
       wait-minutes:
         description: 'How long the build review waits for the analysis of the build.'
         type: number
@@ -98,6 +103,7 @@ jobs:
           review: dependencies
           grants: ${{ inputs.dependency-grants }}
           fail-on-uncovered: ${{ inputs.fail-on-uncovered }}
+          vulnerabilities: ${{ inputs.vulnerabilities }}
           instance: ${{ inputs.instance || secrets.BITBISON_INSTANCE }}
           organization: ${{ inputs.organization || secrets.BITBISON_ORGANIZATION }}
           channel: ${{ secrets.BITBISON_CHANNEL }}

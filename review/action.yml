@@ -66,6 +66,14 @@ inputs:
     description: 'The dependency review fails the job when a change is left uncovered.'
     required: false
     default: 'false'
+  vulnerabilities:
+    description: >-
+      The dependency review: Claude also judges whether the advisories of
+      the direct dependencies the pull request adds or upgrades are
+      relevant to this code base, and names the way out (opt-in). The
+      summary lists those advisories either way.
+    required: false
+    default: 'false'
   pull-request:
     description: 'The pull request to review. Defaults to the one the event names.'
     required: false
@@ -156,6 +164,7 @@ runs:
         PR: ${{ inputs.pull-request }}
         GATE: ${{ inputs.gate }}
         ANALYSIS: ${{ inputs.analysis }}
+        VULNERABILITIES: ${{ inputs.vulnerabilities }}
       run: bash "$GITHUB_ACTION_PATH/setup.sh"
 
     - id: client
@@ -186,6 +195,7 @@ runs:
         DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         WAIT_MINUTES: ${{ inputs.wait-minutes }}
         GIT_REF: ${{ inputs.git-ref }}
+        VULNERABILITIES: ${{ inputs.vulnerabilities }}
       run: bash "$GITHUB_ACTION_PATH/$REVIEW.sh"
 
     # A runner that keeps its home keeps the plugin it installed: the
