@@ -110,8 +110,10 @@ Under `with:`:
 ### Gate a publish on the build
 
 Put the gate between the build and what depends on it. It waits for the
-analysis of the run's build, publishes the report on its job's summary,
-and fails when the gate does, so a job that `needs` it does not run:
+analysis of the run's build, publishes the report as a check on the
+commit (the pull request's Checks tab shows it, "Bitbison build report")
+and on its job's summary, and fails when the gate does, so a job that
+`needs` it does not run:
 
 ```yaml
 jobs:
@@ -122,6 +124,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+      checks: write
       id-token: write
     uses: bitbison-labs/github/.github/workflows/gate.yml@<commit>
     with:

@@ -31,18 +31,39 @@ else
   esac
 fi
 
+DIR=${DIR:-${RUNNER_TEMP:-/tmp}}
+decision() {
+  if $passed; then
+    echo "**Gate (\`$GATE\`): passed.** ${reason^}."
+  else
+    echo "**Gate (\`$GATE\`): failed.** ${reason^}."
+  fi
+}
 {
   [ -s "${REPORT:-}" ] && cat "$REPORT"
   if [ -n "$verdict" ]; then
     jq -r '.analysis // empty' <<< "$ANALYSIS"
     echo
   fi
-  if $passed; then
-    echo "**Gate (\`$GATE\`): passed.** ${reason^}."
-  else
-    echo "**Gate (\`$GATE\`): failed.** ${reason^}."
-  fi
-} >> "$summary"
+  decision
+} > "$DIR/gate.md"
+cat "$DIR/gate.md" >> "$summary"
+
+# The report as a check on the commit the run built: it shows in the pull
+# request's Checks tab beside the build, and a failed gate's check opens on
+# it rather than on a log. Best effort: a token that cannot write checks
+# leaves the job's summary as the report.
+if [ -n "${HEAD_SHA:-}" ] && [ -n "${GH_TOKEN:-}" ]; then
+  title=$(decision | sed -e 's/\*\*//g' -e 's/`//g')
+  conclusion=$($passed && echo success || echo failure)
+  body=$(jq -n --arg sha "$HEAD_SHA" --arg conclusion "$conclusion" --arg title "${title:0:200}" \
+    --rawfile summary "$DIR/gate.md" --arg url "${RUN_URL:-}" \
+    '{name: "Bitbison build report", head_sha: $sha, status: "completed", conclusion: $conclusion,
+      details_url: (if $url == "" then null else $url end),
+      output: {title: $title, summary: ($summary | .[0:65000])}}')
+  gh api -X POST "repos/$REPOSITORY/check-runs" --input - <<< "$body" > /dev/null 2> "$DIR/check.err" ||
+    echo "::warning::bitbison: the build report could not be posted as a check: $(head -c 200 "$DIR/check.err")"
+fi
 
 echo "passed=$passed" >> "$GITHUB_OUTPUT"
 if ! $passed; then

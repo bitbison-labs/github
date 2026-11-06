@@ -266,4 +266,9 @@ runs:
         REPORT: ${{ steps.prepare.outputs.report }}
         ANALYSIS: ${{ steps.claude.outputs.structured_output }}
         CLAUDE: ${{ steps.claude.outcome }}
+        DIR: ${{ steps.setup.outputs.dir }}
+        GH_TOKEN: ${{ inputs.github-token }}
+        REPOSITORY: ${{ github.repository }}
+        HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.workflow_run.head_sha || github.sha }}
+        RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
       run: bash "$GITHUB_ACTION_PATH/gate.sh"

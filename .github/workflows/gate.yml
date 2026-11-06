@@ -92,6 +92,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+      checks: write
       id-token: write
     outputs:
       passed: ${{ steps.review.outputs.passed }}
