@@ -1,0 +1,195 @@
+name: 'Bitbison review'
+description: >-
+  Claude reviews a pull request with Bitbison: the dependencies it adds or
+  upgrades, through the grant workflow, or what its Bitbison build did.
+author: 'Bitbison'
+
+inputs:
+  review:
+    description: >-
+      'dependencies': what the pull request adds or upgrades, from its
+      checkout; run it on pull_request. 'build': what the pull request's
+      Bitbison build did; run it once the build's workflow completed (on:
+      workflow_run).
+    required: false
+    default: 'dependencies'
+  grants:
+    description: >-
+      The dependency review: 'true' takes every change through the Bitbison
+      grant workflow (the check, a request, the check again, then Claude for
+      what is left); 'false' only reads. The build review only reads.
+    required: false
+    default: 'true'
+  instance:
+    description: 'HTTPS instance URL from your Bitbison user portal.'
+    required: true
+  ci-token:
+    description: >-
+      CI token for the reviewer. The build review needs one with the
+      mcp/ci/runtime capability. Store as a secret.
+    required: true
+  organization:
+    description: 'Organization id from your Bitbison user portal. Not needed when channel is given.'
+    required: false
+  channel:
+    description: >-
+      Release channel URL of the Bitbison build integration; the organization
+      is read from it. Store as a secret.
+    required: false
+  anthropic-api-key:
+    description: 'Claude API key. Store as a secret.'
+    required: false
+  claude-code-oauth-token:
+    description: 'Claude Code OAuth token, in place of anthropic-api-key. Store as a secret.'
+    required: false
+  anthropic-federation-rule-id:
+    description: >-
+      Workload identity federation rule (fdrl_...): with
+      anthropic-organization-id, Claude is reached with the job's OIDC token
+      and no stored key.
+    required: false
+  anthropic-organization-id:
+    description: 'Anthropic organization UUID, for workload identity federation.'
+    required: false
+  anthropic-service-account-id:
+    description: 'Service account (svac_...) the federated token acts as.'
+    required: false
+  anthropic-workspace-id:
+    description: 'Workspace (wrkspc_...) for workload identity federation.'
+    required: false
+  model:
+    description: 'The Claude model to review with. Defaults to claude-code-action''s.'
+    required: false
+  fail-on-uncovered:
+    description: 'The dependency review fails the job when a change is left uncovered.'
+    required: false
+    default: 'false'
+  pull-request:
+    description: 'The pull request to review. Defaults to the one the event names.'
+    required: false
+    default: ${{ github.event.pull_request.number || github.event.workflow_run.pull_requests[0].number }}
+  base:
+    description: 'The dependency review: the commit the pull request is compared with.'
+    required: false
+    default: ${{ github.event.pull_request.base.sha }}
+  title:
+    description: 'The dependency review: the pull request''s title, the reason its requests carry.'
+    required: false
+    default: ${{ github.event.pull_request.title }}
+  run-id:
+    description: 'The build review: the workflow run whose Bitbison build it reads.'
+    required: false
+    default: ${{ github.event.workflow_run.id || github.run_id }}
+  run-attempt:
+    description: 'The build review: the attempt of that run.'
+    required: false
+    default: ${{ github.event.workflow_run.run_attempt || github.run_attempt }}
+  wait-minutes:
+    description: 'The build review: how long to wait for the analysis of the build.'
+    required: false
+    default: '15'
+  github-token:
+    description: 'GitHub token with pull-requests: write. Defaults to the job token.'
+    required: false
+    default: ${{ github.token }}
+
+outputs:
+  uncovered:
+    description: 'The dependency review: how many changes no grant covers.'
+    value: ${{ steps.summary.outputs.uncovered }}
+
+runs:
+  using: 'composite'
+  steps:
+    - id: setup
+      shell: bash
+      env:
+        REVIEW: ${{ inputs.review }}
+        GRANTS: ${{ inputs.grants }}
+        INSTANCE: ${{ inputs.instance }}
+        CI_TOKEN: ${{ inputs.ci-token }}
+        RUN_ID: ${{ inputs.run-id }}
+        RUN_ATTEMPT: ${{ inputs.run-attempt }}
+        ORGANIZATION: ${{ inputs.organization }}
+        CHANNEL: ${{ inputs.channel }}
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
+        CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude-code-oauth-token }}
+        FEDERATION_RULE: ${{ inputs.anthropic-federation-rule-id }}
+        FEDERATION_ORG: ${{ inputs.anthropic-organization-id }}
+        MODEL: ${{ inputs.model }}
+        PR: ${{ inputs.pull-request }}
+      run: bash "$GITHUB_ACTION_PATH/setup.sh"
+
+    - id: client
+      if: steps.setup.outputs.run == 'true'
+      shell: bash
+      env:
+        DIR: ${{ steps.setup.outputs.dir }}
+        MARKETPLACE: ${{ steps.setup.outputs.marketplace }}
+      run: bash "$GITHUB_ACTION_PATH/client.sh"
+
+    - id: prepare
+      if: steps.client.outputs.ok == 'true'
+      shell: bash
+      env:
+        REVIEW: ${{ inputs.review }}
+        GRANTS: ${{ steps.setup.outputs.grants }}
+        DIR: ${{ steps.setup.outputs.dir }}
+        LAUNCHER: ${{ steps.client.outputs.launcher }}
+        BITBISON_URL: ${{ steps.setup.outputs.instance }}
+        BITBISON_TOKEN: ${{ inputs.ci-token }}
+        BITBISON_AGENT_SESSION: ${{ steps.setup.outputs.session }}
+        REPOSITORY: ${{ github.repository }}
+        PR: ${{ inputs.pull-request }}
+        BASE: ${{ inputs.base }}
+        TITLE: ${{ inputs.title }}
+        RUN_ID: ${{ inputs.run-id }}
+        RUN_ATTEMPT: ${{ inputs.run-attempt }}
+        DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        WAIT_MINUTES: ${{ inputs.wait-minutes }}
+      run: bash "$GITHUB_ACTION_PATH/$REVIEW.sh"
+
+    # A runner that keeps its home keeps the plugin it installed: the
+    # action's own plugin inputs find it on disk and change nothing.
+    - if: steps.prepare.outputs.prompt != '' && steps.setup.outputs.plugins != ''
+      shell: bash
+      run: |
+        if command -v claude > /dev/null && claude plugin list 2> /dev/null | grep -q 'bitbison@bitbison'; then
+          claude plugin marketplace update bitbison && claude plugin update bitbison@bitbison ||
+            echo "::warning::bitbison: the installed Bitbison plugin could not be updated"
+        fi
+
+    - if: steps.prepare.outputs.prompt != ''
+      uses: anthropics/claude-code-action@c0949c50a78c1ec8ce2647db36629b870e715d0c # v1.0.268
+      env:
+        BITBISON_URL: ${{ steps.setup.outputs.plugins != '' && steps.setup.outputs.instance || '' }}
+        BITBISON_TOKEN: ${{ steps.setup.outputs.plugins != '' && inputs.ci-token || '' }}
+        BITBISON_AGENT_SESSION: ${{ steps.setup.outputs.session }}
+      with:
+        anthropic_api_key: ${{ inputs.anthropic-api-key }}
+        claude_code_oauth_token: ${{ inputs.claude-code-oauth-token }}
+        anthropic_federation_rule_id: ${{ inputs.anthropic-federation-rule-id }}
+        anthropic_organization_id: ${{ inputs.anthropic-organization-id }}
+        anthropic_service_account_id: ${{ inputs.anthropic-service-account-id }}
+        anthropic_workspace_id: ${{ inputs.anthropic-workspace-id }}
+        plugin_marketplaces: ${{ steps.setup.outputs.plugins != '' && steps.setup.outputs.marketplace || '' }}
+        plugins: ${{ steps.setup.outputs.plugins }}
+        prompt: ${{ steps.prepare.outputs.prompt }}
+        claude_args: >-
+          ${{ steps.setup.outputs.args }}
+          --allowedTools "${{ steps.setup.outputs.tools }}"
+
+    - id: summary
+      if: always() && steps.prepare.outputs.ok == 'true' && inputs.review == 'dependencies'
+      shell: bash
+      env:
+        DIR: ${{ steps.setup.outputs.dir }}
+        LAUNCHER: ${{ steps.client.outputs.launcher }}
+        BITBISON_URL: ${{ steps.setup.outputs.instance }}
+        BITBISON_TOKEN: ${{ inputs.ci-token }}
+        BITBISON_AGENT_SESSION: ${{ steps.setup.outputs.session }}
+        GH_TOKEN: ${{ inputs.github-token }}
+        REPOSITORY: ${{ github.repository }}
+        PR: ${{ inputs.pull-request }}
+        FAIL_ON_UNCOVERED: ${{ inputs.fail-on-uncovered }}
+      run: bash "$GITHUB_ACTION_PATH/summary.sh"

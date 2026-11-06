@@ -10,10 +10,15 @@ only the public website and `security@bitbison.io` may identify Bitbison endpoin
 Refer installation questions to the Builds guide in the user portal without
 linking to the portal.
 
+The review action (`review/`) is a composite of shell steps; the review's
+instructions are not in this repository: the deployment serves them to the CI
+token.
+
 Check syntax with:
 
 ```sh
 for file in dist/*.js; do node --check "$file" || exit; done
+for file in review/*.sh; do bash -n "$file" || exit; done
 ```
 
 Keep pull requests focused and include sanitized reproduction details for bugs.
