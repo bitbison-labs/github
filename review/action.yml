@@ -217,6 +217,10 @@ runs:
       if: >-
         steps.prepare.outputs.prompt != '' &&
         (inputs.review != 'build' || inputs.analysis == 'true' || inputs.gate == 'agent')
+      # Claude failing (an outage, a limit) never fails the job by itself:
+      # the summary is the check's, and the gate decides from the outcome
+      # (report passes; agent, with no verdict, fails).
+      continue-on-error: true
       uses: anthropics/claude-code-action@c0949c50a78c1ec8ce2647db36629b870e715d0c # v1.0.268
       env:
         BITBISON_URL: ${{ steps.setup.outputs.plugins != '' && steps.setup.outputs.instance || '' }}
