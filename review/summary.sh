@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The final check, posted as one comment the job keeps up to date, and the
-# job's summary. Fails the job only when asked to and something is
-# uncovered.
+# job's summary; a pull request that changes no dependency is told so too.
+# Fails the job only when asked to and something is uncovered.
 set -uo pipefail
 
 out=$(sh "$LAUNCHER" --json ci summary --state "$DIR/dependencies.json" 2> "$DIR/summary.err") || true
@@ -10,7 +10,6 @@ if ! jq -e 'has("summary")' > /dev/null 2>&1 <<< "$out"; then
   exit 0
 fi
 summary=$(jq -r .summary <<< "$out")
-changes=$(jq -r '.changes + .submodules' <<< "$out")
 uncovered=$(jq -r .uncovered <<< "$out")
 printf '%s\n' "$summary" >> "$GITHUB_STEP_SUMMARY"
 
@@ -21,7 +20,7 @@ existing=$(gh api "repos/$REPOSITORY/issues/$PR/comments" --paginate \
 if [ -n "$existing" ]; then
   gh api -X PATCH "repos/$REPOSITORY/issues/comments/$existing" -f body="$body" > /dev/null ||
     echo "::warning::bitbison: the summary comment could not be updated"
-elif [ "$changes" -gt 0 ]; then
+else
   gh pr comment "$PR" -R "$REPOSITORY" --body "$body" > /dev/null ||
     echo "::warning::bitbison: the summary comment could not be posted"
 fi
