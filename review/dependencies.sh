@@ -17,30 +17,21 @@ common=(--repository "$REPOSITORY" --reason "${reason:0:200}" --state "$DIR/depe
 [ -n "$PR" ] && common+=(--pull-request "$PR")
 [ "$GRANTS" = true ] || common+=(--read-only)
 
-out=""
 # A push named by its ref is reviewed by coverage: its state is recorded,
 # and what no grant covers and no one asked for is reviewed, with nothing
-# fetched. A client or a deployment too old for it falls back to the
-# comparison with the commit the push moved the branch from, and the ref
-# is recorded alone.
+# fetched. A pull request is compared with its base.
 if [ -z "$PR" ] && [ -n "${REF:-}" ]; then
   args=(--json ci dependencies --ref "$REF" "${common[@]}")
   [ -n "${DEFAULT_BRANCH:-}" ] && args+=(--default-branch "$DEFAULT_BRANCH")
   [[ ${RUN_ID:-} =~ ^[0-9]+$ ]] && args+=(--run "$RUN_ID")
-  out=$(sh "$LAUNCHER" "${args[@]}" 2> "$DIR/ci.err") || true
-  if ! jq -e 'has("changes")' > /dev/null 2>&1 <<< "$out"; then
-    echo "bitbison: the coverage review is not available here ($(jq -r '.error // empty' <<< "$out" 2> /dev/null)$(head -c 200 "$DIR/ci.err" | tr '\n' ' ')); comparing with the commit before the push."
-    out=""
-    bash "$(dirname "$0")/refs.sh"
-  fi
-fi
-if [ -z "$out" ]; then
+else
   [[ $BASE =~ ^[0-9a-f]{40}$ ]] || skip "no base commit to compare with"
   if ! git cat-file -e "$BASE^{commit}" 2> /dev/null; then
     git fetch -q --no-tags --depth 1 origin "$BASE" || skip "the base commit could not be fetched"
   fi
-  out=$(sh "$LAUNCHER" --json ci dependencies --base "$BASE" "${common[@]}" 2> "$DIR/ci.err") || true
+  args=(--json ci dependencies --base "$BASE" "${common[@]}")
 fi
+out=$(sh "$LAUNCHER" "${args[@]}" 2> "$DIR/ci.err") || true
 # The checkout's credential has done its work; the reviewer never sees it.
 git config --local --unset-all http.https://github.com/.extraheader 2> /dev/null || true
 jq -e 'has("changes")' > /dev/null 2>&1 <<< "$out" ||

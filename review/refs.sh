@@ -3,8 +3,7 @@
 # pins and every branch and tag the repository has (bitbison ci
 # snapshot), so a grant shows where its release is in use and a deleted
 # branch or tag ends whatever event was missed. Best effort: a failure
-# warns and never fails the job, and a client too old to record refs is
-# a notice.
+# warns and never fails the job.
 set -uo pipefail
 
 warn() { echo "::warning::bitbison: $*"; }
@@ -18,11 +17,7 @@ out=$(sh "$LAUNCHER" "${args[@]}" 2> "$DIR/refs.err") || true
 [ "$MODE" = snapshot ] &&
   git config --local --unset-all http.https://github.com/.extraheader 2> /dev/null || true
 if ! jq -e 'has("ref")' > /dev/null 2>&1 <<< "$out"; then
-  if grep -q "unrecognized subcommand 'snapshot'" "$DIR/refs.err" 2> /dev/null; then
-    echo "::notice::bitbison: this Bitbison client does not record branches and tags yet."
-  else
-    warn "bitbison ci snapshot failed: $(jq -r '.error // empty' <<< "$out" 2> /dev/null)$(head -c 300 "$DIR/refs.err")"
-  fi
+  warn "bitbison ci snapshot failed: $(jq -r '.error // empty' <<< "$out" 2> /dev/null)$(head -c 300 "$DIR/refs.err")"
   exit 0
 fi
 line=$(jq -r '"\(.ref.kind) \(.ref.name) at \(.ref.revision[0:12]): \(.releases) release(s) pinned, \(
