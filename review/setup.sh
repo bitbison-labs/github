@@ -23,14 +23,13 @@ case ${VULNERABILITIES:-off} in
     ;;
 esac
 # The build review also gates a push's or a dispatched run's build. The
-# dependency review is a pull request's, or a push's to the default
-# branch from the commit it moved the branch from; another branch's
-# changes are reviewed on its pull request. With in-use, every push, tag,
-# deletion and run asked for by hand also records the state of the ref
-# checked out (snapshot): everything its tree pins and every branch and
-# tag the repository has, so a deleted one ends whatever event was
-# missed. A deletion runs on the default branch, which is recorded. A
-# pull request's branch is recorded by its own pushes.
+# dependency review is a pull request's, against its base, or a push's
+# to the default branch, by coverage of the state it records; another
+# branch's changes are reviewed on its pull request. What else is
+# recorded is `track`'s: every other branch's push, every tag, a
+# deletion (the default branch's run, whose listing of the repository's
+# branches and tags ends the deleted ref) and a run asked for by hand on
+# a tracked ref. A pull request's branch is recorded by its own pushes.
 mode=review
 ref=""
 if [ "$REVIEW" = build ]; then
@@ -51,23 +50,51 @@ if [ "$REVIEW" = build ]; then
     exit 1
   fi
 else
+  # The default branch is always tracked: its push's review reads its
+  # recorded state. track adds every other branch, every tag, or both.
+  branches=false
+  tags=false
+  IFS=', ' read -r -a tracked <<< "${TRACK:-all}"
+  for t in "${tracked[@]}"; do
+    case $t in
+      all) branches=true; tags=true ;;
+      default-branch | "") ;;
+      branches) branches=true ;;
+      tags) tags=true ;;
+      *)
+        echo "::error::bitbison: track takes all, default-branch, branches and tags, not '$t'"
+        exit 1
+        ;;
+    esac
+  done
+  default="refs/heads/${DEFAULT_BRANCH:-}"
+  is_tracked() {
+    case $1 in
+      "$default") true ;;
+      refs/tags/?*) $tags ;;
+      refs/heads/?*) $branches ;;
+      *) false ;;
+    esac
+  }
   based=false
   [[ ${BASE:-} =~ ^[0-9a-f]{40}$ && ! $BASE =~ ^0+$ ]] && based=true
   if [ -z "$PR" ]; then
     case ${EVENT_NAME:-} in
-      delete)
-        mode=snapshot
-        ref=${GIT_REF_FULL:-}
-        ;;
       push)
         ref=${GIT_REF_FULL:-}
-        if [ "$ref" != "refs/heads/${DEFAULT_BRANCH:-}" ] || [ "${CREATED:-}" = true ] || ! $based; then
+        if [ "$ref" != "$default" ]; then
           mode=snapshot
+          is_tracked "$ref" || ref=""
         fi
+        ;;
+      delete)
+        mode=snapshot
+        if $branches || $tags; then ref=$default; fi
         ;;
       workflow_dispatch)
         mode=snapshot
         ref=${GIT_REF_FULL:-}
+        is_tracked "$ref" || ref=""
         ;;
       *)
         # Another caller's own base, as the input documents.
@@ -76,16 +103,8 @@ else
     esac
   fi
   [[ $ref == refs/heads/?* || $ref == refs/tags/?* ]] || ref=""
-  case ${IN_USE:-true} in
-    true) ;;
-    false) ref="" ;;
-    *)
-      echo "::error::bitbison: in-use must be 'true' or 'false', not '$IN_USE'"
-      exit 1
-      ;;
-  esac
   if [ "$mode" != review ] && [ -z "$ref" ]; then
-    note "nothing to review and no branch or tag to record."
+    note "nothing to review and no branch or tag to record (track: ${TRACK:-all})."
     echo "run=false" >> "$GITHUB_OUTPUT"
     exit 0
   fi

@@ -136,16 +136,16 @@ inputs:
     description: 'The build review: the ref the run built. Defaults to the event''s, a pull request''s merge ref under workflow_run.'
     required: false
     default: ${{ github.event_name != 'workflow_run' && github.ref || '' }}
-  in-use:
+  track:
     description: >-
-      Also record the state of the ref checked out, so a grant shows where
-      its release is in use: everything its tree pins and every branch and
-      tag the repository has, on each push, tag, deletion and run asked
-      for by hand. A push to another branch, a branch's first push, a tag,
-      a deletion and a run asked for by hand are recorded with no review.
-      'false' records nothing.
+      What else the dependency review records besides the default
+      branch, whose state its push review reads: a comma list of
+      'branches' (every other branch's push), 'tags' (every tag), or
+      'all' (both, the default); 'default-branch' records it alone.
+      Each grant shows where its release is in use, from what is
+      recorded.
     required: false
-    default: 'true'
+    default: 'all'
   github-token:
     description: >-
       GitHub token with pull-requests: write, which every comment of the
@@ -185,9 +185,8 @@ runs:
         BASE: ${{ inputs.base }}
         EVENT_NAME: ${{ github.event_name }}
         GIT_REF_FULL: ${{ github.ref }}
-        CREATED: ${{ github.event.created }}
         DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
-        IN_USE: ${{ inputs.in-use }}
+        TRACK: ${{ inputs.track }}
         GATE: ${{ inputs.gate }}
         ANALYSIS: ${{ inputs.analysis }}
         VULNERABILITIES: ${{ inputs.vulnerabilities }}

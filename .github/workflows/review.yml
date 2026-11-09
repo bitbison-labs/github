@@ -4,7 +4,7 @@ name: Bitbison review
 # dependency review (a default-branch push's is on its job's summary, since
 # there is no pull request to comment on), push with no paths filter, tags,
 # delete and workflow_dispatch for the state of each branch and tag
-# (in-use), and workflow_run of the workflows that build under Bitbison (or
+# (track), and workflow_run of the workflows that build under Bitbison (or
 # every workflow) for the build review. Neither holds up the change or
 # fails it.
 
@@ -32,11 +32,11 @@ on:
         type: boolean
         required: false
         default: false
-      in-use:
-        description: 'Record the state of the ref checked out (what its tree pins, and every branch and tag the repository has), so a grant shows where it is in use; false records nothing.'
-        type: boolean
+      track:
+        description: 'What else the dependency review records besides the default branch: branches, tags, or all (the default), as a comma list; default-branch records it alone.'
+        type: string
         required: false
-        default: true
+        default: 'all'
       vulnerabilities:
         description: 'The dependency review: off, or the least severity (critical, high, medium, low) at which Claude judges whether the direct changes'' advisories are relevant to this code base.'
         type: string
@@ -116,7 +116,7 @@ jobs:
           grants: ${{ inputs.dependency-grants }}
           fail-on-uncovered: ${{ inputs.fail-on-uncovered }}
           vulnerabilities: ${{ inputs.vulnerabilities }}
-          in-use: ${{ inputs.in-use }}
+          track: ${{ inputs.track }}
           instance: ${{ inputs.instance || secrets.BITBISON_INSTANCE }}
           organization: ${{ inputs.organization || secrets.BITBISON_ORGANIZATION }}
           channel: ${{ secrets.BITBISON_CHANNEL }}

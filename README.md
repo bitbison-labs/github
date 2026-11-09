@@ -98,8 +98,10 @@ longer in the repository ends, even if its `delete` was missed. Leave
 `push` unfiltered so each push marks its branch as seen; a paths filter
 makes a branch look last seen when its lockfiles last changed. A push to
 another branch, a branch's first push, a tag, a deletion and
-`workflow_dispatch` are recorded with no review. `in-use: false` records
-nothing.
+`workflow_dispatch` are recorded with no review. `track` narrows what is
+recorded besides the default branch, which is always recorded: `all` (the
+default), or a comma list of `branches` and `tags`; `default-branch`
+records it alone.
 
 ```yaml
 on:
