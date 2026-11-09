@@ -224,12 +224,14 @@ runs:
         VULNERABILITIES: ${{ steps.setup.outputs.vulnerabilities }}
         MODE: ${{ steps.setup.outputs.mode }}
         REF: ${{ steps.setup.outputs.ref }}
-      # The ref's state is recorded first, alone or before its review,
-      # while the checkout's credential can still list the repository's
-      # branches and tags.
+      # A ref recorded alone is refs.sh's; a default-branch push's review
+      # records it itself, by coverage.
       run: |
-        [ -n "$REF" ] && bash "$GITHUB_ACTION_PATH/refs.sh"
-        [ "$MODE" = snapshot ] || bash "$GITHUB_ACTION_PATH/$REVIEW.sh"
+        if [ "$MODE" = snapshot ]; then
+          bash "$GITHUB_ACTION_PATH/refs.sh"
+        else
+          bash "$GITHUB_ACTION_PATH/$REVIEW.sh"
+        fi
 
     # A runner that keeps its home keeps the plugin it installed: the
     # action's own plugin inputs find it on disk and change nothing.

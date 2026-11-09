@@ -11,6 +11,7 @@ warn() { echo "::warning::bitbison: $*"; }
 
 args=(--json ci snapshot --ref "$REF")
 [ -n "${DEFAULT_BRANCH:-}" ] && args+=(--default-branch "$DEFAULT_BRANCH")
+[[ ${RUN_ID:-} =~ ^[0-9]+$ ]] && args+=(--run "$RUN_ID")
 # The checkout's credential lists the repository's branches and tags; a
 # review that follows fetches its base with it and then removes it.
 out=$(sh "$LAUNCHER" "${args[@]}" 2> "$DIR/refs.err") || true

@@ -17,8 +17,14 @@ Claude reviews your pull requests and pushes with
 
 - **Dependencies**, as soon as a pull request changes, or on a push.
   Bitbison works out the direct dependencies it adds or upgrades, and every
-  submodule it adds, moves or points elsewhere, against the base branch (for
-  a push, the commit the branch was at before it). Each dependency is
+  submodule it adds, moves or points elsewhere, against the base branch. A
+  push to the default branch is reviewed by coverage instead: every direct
+  dependency the branch pins that no grant covers and no one has asked for
+  yet, whatever commits came before, and what the push brought since the
+  state Bitbison last recorded; nothing is fetched, and a failed or missed
+  run is made good by the next. What the branch already pinned when
+  Bitbison first recorded it is left to a person's `bitbison grant
+  baseline`, and the summary says how many. Each dependency is
   taken through your organization's Bitbison grant workflow: what your rules
   grant is granted, a request is made for the rest, and Claude reviews only
   what is still uncovered, deeper (the registry's analysis and capture of the
