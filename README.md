@@ -79,15 +79,27 @@ jobs:
     secrets: inherit
 ```
 
-To review each push to a branch as well, or in place of pull requests,
-add `push`, filtered to the lockfiles and submodules so that a push that
-changes no dependency starts nothing (list the paths of your submodules;
-a push that creates a branch is not reviewed):
+To review each push to the default branch as well, add `push`, filtered
+to the lockfiles and submodules so that a push that changes no dependency
+starts nothing (list the paths of your submodules). Another branch's
+changes are reviewed on its pull request.
+
+The dependency review also records what each branch and tag it sees pins,
+so each grant shows where its release is in use, since when, and when it
+stopped being used. A push to another branch, a branch's first push and a
+tag are recorded with no review (GitHub skips the paths filter for tags),
+a `delete` ends what the deleted branch or tag pinned, and
+`workflow_dispatch` records the branch you run it on, which is how to
+record a branch whose lockfiles have not changed since you added the
+review. Add this file's own path to the filter, so the commit that adds it
+records its branch. `in-use: false` records nothing.
 
 ```yaml
 on:
+  pull_request:
   push:
-    branches: [main]
+    branches: ['**']
+    tags: ['**']
     paths:
       - '**/Cargo.lock'
       - '**/package-lock.json'
@@ -95,6 +107,9 @@ on:
       - '**/uv.lock'
       - '**/requirements*.txt'
       - '.gitmodules'
+      - '.github/workflows/bitbison-review.yml'
+  delete:
+  workflow_dispatch:
 ```
 
 The build review follows every workflow and says within a minute when a run

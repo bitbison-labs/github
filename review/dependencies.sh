@@ -24,10 +24,18 @@ args=(--json ci dependencies --base "$BASE" --repository "$REPOSITORY"
   --reason "${reason:0:200}" --state "$DIR/dependencies.json")
 [ -n "$PR" ] && args+=(--pull-request "$PR")
 [ "$GRANTS" = true ] || args+=(--read-only)
+# The ref's tree is also recorded as what it pins.
+if [ -n "${REF:-}" ]; then
+  args+=(--ref "$REF")
+  [ -n "${DEFAULT_BRANCH:-}" ] && args+=(--default-branch "$DEFAULT_BRANCH")
+fi
 out=$(sh "$LAUNCHER" "${args[@]}" 2> "$DIR/ci.err") || true
 jq -e 'has("changes")' > /dev/null 2>&1 <<< "$out" ||
   skip "bitbison ci dependencies failed: $(jq -r '.error // empty' <<< "$out" 2> /dev/null)$(head -c 300 "$DIR/ci.err")"
 echo "bitbison: $(jq -r '"\(.changes) direct dependency change(s), \(.uncovered) uncovered, \(.submodules) submodule change(s)"' <<< "$out")"
+# What the ref pins, recorded with the check.
+jq -r '.ref // empty | if has("error") then "::warning::bitbison: the ref was not recorded: \(.error)"
+  else "bitbison: \(.kind) \(.name) recorded: \(.added) added, \(.removed) removed\(if .applied then "" else " (not applied: a later commit is recorded)" end)" end' <<< "$out"
 
 {
   echo "ok=true"

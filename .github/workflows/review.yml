@@ -1,11 +1,12 @@
 name: Bitbison review
 
-# Call it from a workflow with its triggers: pull_request, push or both for
-# the dependency review (a push's is on its job's summary, since there is no
-# pull request to comment on; give push a paths filter of the lockfiles and
-# submodules), and workflow_run of the workflows that build under Bitbison
-# (or every workflow) for the build review. Neither holds up the change or
-# fails it.
+# Call it from a workflow with its triggers: pull_request and push for the
+# dependency review (a default-branch push's is on its job's summary, since
+# there is no pull request to comment on; give push a paths filter of the
+# lockfiles and submodules, which GitHub skips for tags), delete and
+# workflow_dispatch for what each branch and tag pins (in-use), and
+# workflow_run of the workflows that build under Bitbison (or every
+# workflow) for the build review. Neither holds up the change or fails it.
 
 on:
   workflow_call:
@@ -31,6 +32,11 @@ on:
         type: boolean
         required: false
         default: false
+      in-use:
+        description: 'Record what each branch and tag the job sees pins, so a grant shows where it is in use; false records nothing.'
+        type: boolean
+        required: false
+        default: true
       vulnerabilities:
         description: 'The dependency review: off, or the least severity (critical, high, medium, low) at which Claude judges whether the direct changes'' advisories are relevant to this code base.'
         type: string
@@ -85,11 +91,12 @@ permissions: {}
 jobs:
   dependencies:
     # A pull request from a fork gets no secrets, and is not reviewed. A
-    # push is to this repository.
+    # push, a deletion and a run asked for by hand are this repository's.
     if: >-
       (github.event_name == 'pull_request' &&
        github.event.pull_request.head.repo.full_name == github.repository) ||
-      github.event_name == 'push'
+      github.event_name == 'push' || github.event_name == 'delete' ||
+      github.event_name == 'workflow_dispatch'
     runs-on: ${{ fromJSON(inputs.runs-on) }}
     permissions:
       contents: read
@@ -109,6 +116,7 @@ jobs:
           grants: ${{ inputs.dependency-grants }}
           fail-on-uncovered: ${{ inputs.fail-on-uncovered }}
           vulnerabilities: ${{ inputs.vulnerabilities }}
+          in-use: ${{ inputs.in-use }}
           instance: ${{ inputs.instance || secrets.BITBISON_INSTANCE }}
           organization: ${{ inputs.organization || secrets.BITBISON_ORGANIZATION }}
           channel: ${{ secrets.BITBISON_CHANNEL }}

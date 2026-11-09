@@ -136,6 +136,16 @@ inputs:
     description: 'The build review: the ref the run built. Defaults to the event''s, a pull request''s merge ref under workflow_run.'
     required: false
     default: ${{ github.event_name != 'workflow_run' && github.ref || '' }}
+  in-use:
+    description: >-
+      The dependency review also records what each branch and tag the job
+      sees pins, so a grant shows where it is in use: a reviewed pull
+      request's branch or default-branch push, and, recorded alone, a
+      tag, a new branch, another branch's push, a run asked for by hand;
+      a delete event ends what the deleted branch or tag pinned. 'false'
+      records nothing.
+    required: false
+    default: 'true'
   github-token:
     description: >-
       GitHub token with pull-requests: write, which every comment of the
@@ -173,6 +183,14 @@ runs:
         MODEL: ${{ inputs.model }}
         PR: ${{ inputs.pull-request }}
         BASE: ${{ inputs.base }}
+        EVENT_NAME: ${{ github.event_name }}
+        GIT_REF_FULL: ${{ github.ref }}
+        HEAD_REF: ${{ github.head_ref }}
+        CREATED: ${{ github.event.created }}
+        DELETED_REF: ${{ github.event_name == 'delete' && github.event.ref || '' }}
+        DELETED_TYPE: ${{ github.event.ref_type }}
+        DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        IN_USE: ${{ inputs.in-use }}
         GATE: ${{ inputs.gate }}
         ANALYSIS: ${{ inputs.analysis }}
         VULNERABILITIES: ${{ inputs.vulnerabilities }}
@@ -207,7 +225,14 @@ runs:
         WAIT_MINUTES: ${{ inputs.wait-minutes }}
         GIT_REF: ${{ inputs.git-ref }}
         VULNERABILITIES: ${{ steps.setup.outputs.vulnerabilities }}
-      run: bash "$GITHUB_ACTION_PATH/$REVIEW.sh"
+        MODE: ${{ steps.setup.outputs.mode }}
+        REF: ${{ steps.setup.outputs.ref }}
+      # A ref recorded alone, or forgotten, is refs.sh's, with no review.
+      run: |
+        case $MODE in
+          snapshot | forget) bash "$GITHUB_ACTION_PATH/refs.sh" ;;
+          *) bash "$GITHUB_ACTION_PATH/$REVIEW.sh" ;;
+        esac
 
     # A runner that keeps its home keeps the plugin it installed: the
     # action's own plugin inputs find it on disk and change nothing.

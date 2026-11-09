@@ -22,9 +22,15 @@ case ${VULNERABILITIES:-off} in
     exit 1
     ;;
 esac
-# The build review also gates a push's or a dispatched run's build; the
-# dependency review is a pull request's, or a push's from the commit it
-# moved the branch from.
+# The build review also gates a push's or a dispatched run's build. The
+# dependency review is a pull request's, or a push's to the default
+# branch from the commit it moved the branch from; another branch's
+# changes are reviewed on its pull request. Every ref the job sees is
+# also recorded as what it pins, with in-use: a tag, a new branch,
+# another branch's push and a run asked for by hand are recorded alone
+# (snapshot), and a deleted branch or tag ends what it pinned (forget).
+mode=review
+ref=""
 if [ "$REVIEW" = build ]; then
   case ${GATE:-report} in
     off)
@@ -42,12 +48,47 @@ if [ "$REVIEW" = build ]; then
     echo "::error::bitbison: gate 'agent' lets Claude decide, so it needs analysis: true"
     exit 1
   fi
-elif [ -z "$PR" ] && [[ ! ${BASE:-} =~ ^[0-9a-f]{40}$ || $BASE =~ ^0+$ ]]; then
-  # A push that creates the branch has an all-zero base: nothing to
-  # compare it with.
-  note "neither a pull request nor a push from an earlier commit; nothing to review."
-  echo "run=false" >> "$GITHUB_OUTPUT"
-  exit 0
+else
+  based=false
+  [[ ${BASE:-} =~ ^[0-9a-f]{40}$ && ! $BASE =~ ^0+$ ]] && based=true
+  if [ -n "$PR" ]; then
+    [ -n "${HEAD_REF:-}" ] && ref="refs/heads/$HEAD_REF"
+  else
+    case ${EVENT_NAME:-} in
+      delete)
+        mode=forget
+        [ "${DELETED_TYPE:-}" = tag ] && ref="refs/tags/$DELETED_REF" || ref="refs/heads/$DELETED_REF"
+        ;;
+      push)
+        ref=${GIT_REF_FULL:-}
+        if [ "$ref" != "refs/heads/${DEFAULT_BRANCH:-}" ] || [ "${CREATED:-}" = true ] || ! $based; then
+          mode=snapshot
+        fi
+        ;;
+      workflow_dispatch)
+        mode=snapshot
+        ref=${GIT_REF_FULL:-}
+        ;;
+      *)
+        # Another caller's own base, as the input documents.
+        $based || mode=none
+        ;;
+    esac
+  fi
+  [[ $ref == refs/heads/?* || $ref == refs/tags/?* ]] || ref=""
+  case ${IN_USE:-true} in
+    true) ;;
+    false) ref="" ;;
+    *)
+      echo "::error::bitbison: in-use must be 'true' or 'false', not '$IN_USE'"
+      exit 1
+      ;;
+  esac
+  if [ "$mode" != review ] && [ -z "$ref" ]; then
+    note "nothing to review and no branch or tag to record."
+    echo "run=false" >> "$GITHUB_OUTPUT"
+    exit 0
+  fi
 fi
 missing=()
 for tool in curl jq gh git; do
@@ -55,10 +96,13 @@ for tool in curl jq gh git; do
 done
 [ ${#missing[@]} -eq 0 ] || skip "the runner has no ${missing[*]}"
 [ -n "$CI_TOKEN" ] || skip "ci-token is empty (a pull request from a fork gets no secrets)"
-if [ -z "$ANTHROPIC_API_KEY$CLAUDE_CODE_OAUTH_TOKEN" ] && { [ -z "$FEDERATION_RULE" ] || [ -z "$FEDERATION_ORG" ]; }; then
-  skip "a Claude credential is required: anthropic-api-key, claude-code-oauth-token, or anthropic-federation-rule-id with anthropic-organization-id"
+# Recording a ref needs the client alone, no Claude.
+if [ "$mode" = review ]; then
+  if [ -z "$ANTHROPIC_API_KEY$CLAUDE_CODE_OAUTH_TOKEN" ] && { [ -z "$FEDERATION_RULE" ] || [ -z "$FEDERATION_ORG" ]; }; then
+    skip "a Claude credential is required: anthropic-api-key, claude-code-oauth-token, or anthropic-federation-rule-id with anthropic-organization-id"
+  fi
+  [[ $MODEL =~ ^[A-Za-z0-9._:/@-]*$ ]] || skip "model is not a model name"
 fi
-[[ $MODEL =~ ^[A-Za-z0-9._:/@-]*$ ]] || skip "model is not a model name"
 
 instance=${INSTANCE%/}
 host=${instance#https://}
@@ -81,6 +125,22 @@ curl -fsS --proto '=https' --max-time 30 -A bitbison-github-action -o /dev/null 
   "$marketplace/info/refs?service=git-upload-pack" ||
   skip "the Bitbison plugin is not available from this instance"
 
+dir="${RUNNER_TEMP:-/tmp}/bitbison-review"
+mkdir -p "$dir" && chmod 700 "$dir"
+umask 077
+if [ "$mode" != review ]; then
+  {
+    echo "run=true"
+    echo "mode=$mode"
+    echo "ref=$ref"
+    echo "instance=$instance"
+    echo "marketplace=$marketplace"
+    echo "session=github:$RUN_ID-$RUN_ATTEMPT:$mode"
+    echo "dir=$dir"
+  } >> "$GITHUB_OUTPUT"
+  exit 0
+fi
+
 case $REVIEW in
   dependencies) default_grants=true ;;
   build) default_grants=false ;;
@@ -94,9 +154,6 @@ esac
 # A build review only reads.
 [ "$REVIEW" = build ] && grants=false
 
-dir="${RUNNER_TEMP:-/tmp}/bitbison-review"
-mkdir -p "$dir" && chmod 700 "$dir"
-umask 077
 tools='Bash(gh pr diff:*),Bash(gh pr view:*)'
 schema=""
 # A push has no pull request to comment on: its reviewer reads the
@@ -159,6 +216,8 @@ fi
 
 {
   echo "run=true"
+  echo "mode=$mode"
+  echo "ref=$ref"
   echo "grants=$grants"
   echo "instance=$instance"
   echo "marketplace=$marketplace"
