@@ -1,37 +1,36 @@
 #!/usr/bin/env bash
-# What a branch or tag pins, recorded with no review: a tag, a new
-# branch, another branch's push or a run asked for by hand (snapshot);
-# or a deleted branch or tag, whose pins end (forget). Best effort: a
-# failure warns and never fails the job.
+# The state of the ref checked out, with no review: everything its tree
+# pins and every branch and tag the repository has (bitbison ci
+# snapshot), so a grant shows where its release is in use and a deleted
+# branch or tag ends whatever event was missed. Best effort: a failure
+# warns and never fails the job, and a client too old to record refs is
+# a notice.
 set -uo pipefail
 
 warn() { echo "::warning::bitbison: $*"; }
 
-case $MODE in
-  snapshot)
-    args=(--json ci snapshot --ref "$REF")
-    [ -n "${DEFAULT_BRANCH:-}" ] && args+=(--default-branch "$DEFAULT_BRANCH")
-    ;;
-  forget) args=(--json ci forget --ref "$REF") ;;
-  *)
-    warn "unknown mode '$MODE'"
-    exit 0
-    ;;
-esac
-# The checkout's credential is not needed: nothing is fetched.
-git config --local --unset-all http.https://github.com/.extraheader 2> /dev/null || true
+args=(--json ci snapshot --ref "$REF")
+[ -n "${DEFAULT_BRANCH:-}" ] && args+=(--default-branch "$DEFAULT_BRANCH")
+# The checkout's credential lists the repository's branches and tags; a
+# review that follows fetches its base with it and then removes it.
 out=$(sh "$LAUNCHER" "${args[@]}" 2> "$DIR/refs.err") || true
+[ "$MODE" = snapshot ] &&
+  git config --local --unset-all http.https://github.com/.extraheader 2> /dev/null || true
 if ! jq -e 'has("ref")' > /dev/null 2>&1 <<< "$out"; then
-  warn "bitbison ci $MODE failed: $(jq -r '.error // empty' <<< "$out" 2> /dev/null)$(head -c 300 "$DIR/refs.err")"
+  if grep -q "unrecognized subcommand 'snapshot'" "$DIR/refs.err" 2> /dev/null; then
+    echo "::notice::bitbison: this Bitbison client does not record branches and tags yet."
+  else
+    warn "bitbison ci snapshot failed: $(jq -r '.error // empty' <<< "$out" 2> /dev/null)$(head -c 300 "$DIR/refs.err")"
+  fi
   exit 0
 fi
-case $MODE in
-  snapshot)
-    line=$(jq -r '"\(.ref.kind) \(.ref.name) at \(.ref.revision[0:12]): \(.releases) release(s) pinned, \(.ref.added) added, \(.ref.removed) removed\(if .ref.applied then "" else " (not applied: the ref is recorded at a later commit)" end)"' <<< "$out")
-    ;;
-  forget)
-    line=$(jq -r 'if .ref == null then "nothing was recorded for this ref" else "\(.ref.kind) \(.ref.name) deleted: \(.removed) release(s) no longer pinned" end' <<< "$out")
-    ;;
-esac
+line=$(jq -r '"\(.ref.kind) \(.ref.name) at \(.ref.revision[0:12]): \(.releases) release(s) pinned, \(
+  if .applied | not then "not applied (a later commit is recorded)"
+  elif .changed then "\(.added) added, \(.removed) removed"
+  else "unchanged" end)\(
+  if (.deleted | type) == "array" and (.deleted | length) > 0
+  then "; ended, no longer in the repository: \([.deleted[] | "\(.kind) \(.name)"] | join(", "))"
+  else "" end)"' <<< "$out")
 echo "bitbison: $line"
+jq -r '.listing.error // empty | "::warning::bitbison: the repository'"'"'s branches and tags were not listed, so none was ended: \(.)"' <<< "$out"
 printf '## What this ref pins (Bitbison)\n\n%s\n' "$line" >> "${GITHUB_STEP_SUMMARY:-/dev/null}"

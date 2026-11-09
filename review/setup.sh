@@ -25,10 +25,12 @@ esac
 # The build review also gates a push's or a dispatched run's build. The
 # dependency review is a pull request's, or a push's to the default
 # branch from the commit it moved the branch from; another branch's
-# changes are reviewed on its pull request. Every ref the job sees is
-# also recorded as what it pins, with in-use: a tag, a new branch,
-# another branch's push and a run asked for by hand are recorded alone
-# (snapshot), and a deleted branch or tag ends what it pinned (forget).
+# changes are reviewed on its pull request. With in-use, every push, tag,
+# deletion and run asked for by hand also records the state of the ref
+# checked out (snapshot): everything its tree pins and every branch and
+# tag the repository has, so a deleted one ends whatever event was
+# missed. A deletion runs on the default branch, which is recorded. A
+# pull request's branch is recorded by its own pushes.
 mode=review
 ref=""
 if [ "$REVIEW" = build ]; then
@@ -51,13 +53,11 @@ if [ "$REVIEW" = build ]; then
 else
   based=false
   [[ ${BASE:-} =~ ^[0-9a-f]{40}$ && ! $BASE =~ ^0+$ ]] && based=true
-  if [ -n "$PR" ]; then
-    [ -n "${HEAD_REF:-}" ] && ref="refs/heads/$HEAD_REF"
-  else
+  if [ -z "$PR" ]; then
     case ${EVENT_NAME:-} in
       delete)
-        mode=forget
-        [ "${DELETED_TYPE:-}" = tag ] && ref="refs/tags/$DELETED_REF" || ref="refs/heads/$DELETED_REF"
+        mode=snapshot
+        ref=${GIT_REF_FULL:-}
         ;;
       push)
         ref=${GIT_REF_FULL:-}

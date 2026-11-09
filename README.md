@@ -79,20 +79,21 @@ jobs:
     secrets: inherit
 ```
 
-To review each push to the default branch as well, add `push`, filtered
-to the lockfiles and submodules so that a push that changes no dependency
-starts nothing (list the paths of your submodules). Another branch's
-changes are reviewed on its pull request.
+To review each push to the default branch as well, add `push`. Another
+branch's changes are reviewed on its pull request, and a push that changes
+no dependency asks Claude nothing.
 
-The dependency review also records what each branch and tag it sees pins,
-so each grant shows where its release is in use, since when, and when it
-stopped being used. A push to another branch, a branch's first push and a
-tag are recorded with no review (GitHub skips the paths filter for tags),
-a `delete` ends what the deleted branch or tag pinned, and
-`workflow_dispatch` records the branch you run it on, which is how to
-record a branch whose lockfiles have not changed since you added the
-review. Add this file's own path to the filter, so the commit that adds it
-records its branch. `in-use: false` records nothing.
+Each push, tag, deletion and run asked for by hand also records the state
+of the ref checked out: everything its tree pins, and every branch and tag
+the repository has. Each grant then shows where its release is in use,
+since when, and when it stopped being used. Every snapshot stands alone: a
+set already recorded only marks the ref as seen, and a branch or tag no
+longer in the repository ends, even if its `delete` was missed. Leave
+`push` unfiltered so each push marks its branch as seen; a paths filter
+makes a branch look last seen when its lockfiles last changed. A push to
+another branch, a branch's first push, a tag, a deletion and
+`workflow_dispatch` are recorded with no review. `in-use: false` records
+nothing.
 
 ```yaml
 on:
@@ -100,14 +101,6 @@ on:
   push:
     branches: ['**']
     tags: ['**']
-    paths:
-      - '**/Cargo.lock'
-      - '**/package-lock.json'
-      - '**/go.sum'
-      - '**/uv.lock'
-      - '**/requirements*.txt'
-      - '.gitmodules'
-      - '.github/workflows/bitbison-review.yml'
   delete:
   workflow_dispatch:
 ```
