@@ -1,14 +1,16 @@
 name: 'Bitbison review'
 description: >-
-  Claude reviews a pull request with Bitbison: the dependencies it adds or
-  upgrades, through the grant workflow, or what its Bitbison build did.
+  Claude reviews a pull request or a push with Bitbison: the dependencies
+  it adds or upgrades, through the grant workflow, or what its Bitbison
+  build did.
 author: 'Bitbison'
 
 inputs:
   review:
     description: >-
-      'dependencies': what the pull request adds or upgrades, from its
-      checkout; run it on pull_request. 'build': what the pull request's
+      'dependencies': what the pull request or the push adds or upgrades,
+      from its checkout; run it on pull_request or push (a push's review
+      is on the job's summary). 'build': what the pull request's
       Bitbison build did; run it once the build's workflow completed (on:
       workflow_run).
     required: false
@@ -70,7 +72,7 @@ inputs:
     description: >-
       The dependency review: the least severity at which Claude also judges
       whether the advisories of the direct dependencies the pull request
-      adds or upgrades are relevant to this code base, and names the way
+      or the push adds or upgrades are relevant to this code base, and names the way
       out: critical, high, medium or low (an unrated advisory counts as
       low); 'off' never asks it. 'true' is high, 'false' is off. The
       summary lists every advisory either way.
@@ -81,13 +83,19 @@ inputs:
     required: false
     default: ${{ github.event.pull_request.number || github.event.workflow_run.pull_requests[0].number }}
   base:
-    description: 'The dependency review: the commit the pull request is compared with.'
+    description: >-
+      The dependency review: the commit the pull request is compared with,
+      or the one a push moved the branch from. With no pull request, a
+      base makes the review a push's.
     required: false
-    default: ${{ github.event.pull_request.base.sha }}
+    default: ${{ github.event.pull_request.base.sha || github.event.before }}
   title:
-    description: 'The dependency review: the pull request''s title, the reason its requests carry.'
+    description: >-
+      The dependency review: the pull request's title, or the push's last
+      commit message (its subject line is used), the reason its requests
+      carry.
     required: false
-    default: ${{ github.event.pull_request.title }}
+    default: ${{ github.event.pull_request.title || github.event.head_commit.message }}
   run-id:
     description: 'The build review: the workflow run whose Bitbison build it reads.'
     required: false
@@ -164,6 +172,7 @@ runs:
         FEDERATION_ORG: ${{ inputs.anthropic-organization-id }}
         MODEL: ${{ inputs.model }}
         PR: ${{ inputs.pull-request }}
+        BASE: ${{ inputs.base }}
         GATE: ${{ inputs.gate }}
         ANALYSIS: ${{ inputs.analysis }}
         VULNERABILITIES: ${{ inputs.vulnerabilities }}
@@ -210,9 +219,10 @@ runs:
             echo "::warning::bitbison: the installed Bitbison plugin could not be updated"
         fi
 
-    # The dependency review's reviewer takes what the grant workflow left;
-    # the build review's analyzes a build that is not clean, when asked to
-    # or when it decides the gate.
+    # The dependency review's reviewer takes what the grant workflow left,
+    # commenting on a pull request or answering a push's notes; the build
+    # review's analyzes a build that is not clean, when asked to or when it
+    # decides the gate.
     - id: claude
       if: >-
         steps.prepare.outputs.prompt != '' &&
@@ -254,6 +264,7 @@ runs:
         REPOSITORY: ${{ github.repository }}
         PR: ${{ inputs.pull-request }}
         FAIL_ON_UNCOVERED: ${{ inputs.fail-on-uncovered }}
+        NOTES: ${{ steps.claude.outputs.structured_output }}
       run: bash "$GITHUB_ACTION_PATH/summary.sh"
 
     # The build review: the report and the analysis on the job's summary,

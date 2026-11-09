@@ -10,20 +10,23 @@ GitHub Actions secrets.
 
 `github-token` defaults to the job token and needs `actions: read`.
 
-## Review pull requests with Claude
+## Review pull requests and pushes with Claude
 
-Claude reviews your pull requests with [Bitbison](https://bitbison.io/), in
-two reviews:
+Claude reviews your pull requests and pushes with
+[Bitbison](https://bitbison.io/), in two reviews:
 
-- **Dependencies**, as soon as a pull request changes. Bitbison works out the
-  direct dependencies it adds or upgrades, and every submodule it adds,
-  moves or points elsewhere, against the base branch. Each dependency is
+- **Dependencies**, as soon as a pull request changes, or on a push.
+  Bitbison works out the direct dependencies it adds or upgrades, and every
+  submodule it adds, moves or points elsewhere, against the base branch (for
+  a push, the commit the branch was at before it). Each dependency is
   taken through your organization's Bitbison grant workflow: what your rules
   grant is granted, a request is made for the rest, and Claude reviews only
   what is still uncovered, deeper (the registry's analysis and capture of the
   release, alternatives your organization already uses) and comments on it.
   One summary comment, kept up to date, says where every change stands and
-  what a person must still decide.
+  what a person must still decide. A push has no pull request to comment
+  on: the summary, with Claude's notes under it, is on the job's summary,
+  and the job's annotation says whether a person has something to decide.
 - **Build**, once a build has run under the build integration above and
   been analyzed: a report of what the build itself did (its verdict
   against the default branch's, its findings, the hosts it connected to,
@@ -76,6 +79,24 @@ jobs:
     secrets: inherit
 ```
 
+To review each push to a branch as well, or in place of pull requests,
+add `push`, filtered to the lockfiles and submodules so that a push that
+changes no dependency starts nothing (list the paths of your submodules;
+a push that creates a branch is not reviewed):
+
+```yaml
+on:
+  push:
+    branches: [main]
+    paths:
+      - '**/Cargo.lock'
+      - '**/package-lock.json'
+      - '**/go.sum'
+      - '**/uv.lock'
+      - '**/requirements*.txt'
+      - '.gitmodules'
+```
+
 The build review follows every workflow and says within a minute when a run
 had no Bitbison build; name the workflows that build under Bitbison in place
 of `"**"` to follow those alone. GitHub runs a `workflow_run` workflow from
@@ -91,7 +112,7 @@ Under `with:`:
   change is left uncovered.
 - `vulnerabilities: high` (or `critical`, `medium`, `low`): Claude also
   judges whether the advisories of the direct dependencies a pull request
-  adds or upgrades, at that severity or above, are relevant to your code
+  or a push adds or upgrades, at that severity or above, are relevant to your code
   (it searches before it reads), and names the way out: a fixed version,
   an alternative your organization uses, or a mitigation. An unrated
   advisory counts as `low`. `off` by default. The summary lists every

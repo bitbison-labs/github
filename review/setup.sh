@@ -23,7 +23,8 @@ case ${VULNERABILITIES:-off} in
     ;;
 esac
 # The build review also gates a push's or a dispatched run's build; the
-# dependency review is a pull request's alone.
+# dependency review is a pull request's, or a push's from the commit it
+# moved the branch from.
 if [ "$REVIEW" = build ]; then
   case ${GATE:-report} in
     off)
@@ -41,8 +42,10 @@ if [ "$REVIEW" = build ]; then
     echo "::error::bitbison: gate 'agent' lets Claude decide, so it needs analysis: true"
     exit 1
   fi
-elif [ -z "$PR" ]; then
-  note "not a pull request; nothing to review."
+elif [ -z "$PR" ] && [[ ! ${BASE:-} =~ ^[0-9a-f]{40}$ || $BASE =~ ^0+$ ]]; then
+  # A push that creates the branch has an all-zero base: nothing to
+  # compare it with.
+  note "neither a pull request nor a push from an earlier commit; nothing to review."
   echo "run=false" >> "$GITHUB_OUTPUT"
   exit 0
 fi
@@ -96,9 +99,17 @@ mkdir -p "$dir" && chmod 700 "$dir"
 umask 077
 tools='Bash(gh pr diff:*),Bash(gh pr view:*)'
 schema=""
+# A push has no pull request to comment on: its reviewer reads the
+# commits with git and answers notes the summary publishes.
+notes='{"type":"object","properties":{"notes":{"type":"array","items":{"type":"object","properties":{"package":{"type":"string"},"note":{"type":"string"}},"required":["package","note"]}}},"required":["notes"]}'
 case $REVIEW in
   dependencies)
-    tools="$tools,mcp__github_inline_comment__create_inline_comment"
+    if [ -n "$PR" ]; then
+      tools="$tools,mcp__github_inline_comment__create_inline_comment"
+    else
+      tools='Bash(git show:*),Bash(git log:*),Bash(git diff:*)'
+      schema=$notes
+    fi
     # The opt-in vulnerability review reads the code: search, then read.
     [ "$VULNERABILITIES" != off ] && tools="$tools,Read,Grep,Glob"
     ;;

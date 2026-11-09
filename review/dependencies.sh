@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# The pull request's direct dependency changes through what the grant
-# workflow settles without a model, and the prompt for what is left.
+# A pull request's or a push's direct dependency changes through what the
+# grant workflow settles without a model, and the prompt for what is left.
 set -uo pipefail
 . "$(dirname "$0")/prompt.sh"
 
@@ -13,9 +13,16 @@ fi
 # The checkout's credential has done its work; the reviewer never sees it.
 git config --local --unset-all http.https://github.com/.extraheader 2> /dev/null || true
 
-reason="Pull request #$PR${TITLE:+: $TITLE}"
-args=(--json ci dependencies --base "$BASE" --repository "$REPOSITORY" --pull-request "$PR"
+# A push's reason is its last commit, by its subject line.
+if [ -n "$PR" ]; then
+  reason="Pull request #$PR${TITLE:+: $TITLE}"
+else
+  subject=${TITLE%%$'\n'*}
+  reason="Push to ${GITHUB_REF_NAME:-the branch} at $(git rev-parse --short=12 HEAD)${subject:+: $subject}"
+fi
+args=(--json ci dependencies --base "$BASE" --repository "$REPOSITORY"
   --reason "${reason:0:200}" --state "$DIR/dependencies.json")
+[ -n "$PR" ] && args+=(--pull-request "$PR")
 [ "$GRANTS" = true ] || args+=(--read-only)
 out=$(sh "$LAUNCHER" "${args[@]}" 2> "$DIR/ci.err") || true
 jq -e 'has("changes")' > /dev/null 2>&1 <<< "$out" ||
