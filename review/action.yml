@@ -249,7 +249,8 @@ runs:
     - id: claude
       if: >-
         steps.prepare.outputs.prompt != '' &&
-        (inputs.review != 'build' || inputs.analysis == 'true' || inputs.gate == 'agent')
+        (inputs.review != 'build' || inputs.analysis == 'true' || inputs.gate == 'agent') &&
+        contains(fromJSON('["pull_request", "pull_request_target", "pull_request_review", "pull_request_review_comment", "issues", "issue_comment", "workflow_dispatch", "repository_dispatch", "schedule", "workflow_run"]'), github.event_name)
       # Claude failing (an outage, a limit) never fails the job by itself:
       # the summary is the check's, and the gate decides from the outcome
       # (report passes; agent, with no verdict, fails).
@@ -261,6 +262,37 @@ runs:
         BITBISON_AGENT_SESSION: ${{ steps.setup.outputs.session }}
       with:
         github_token: ${{ inputs.github-token }}
+        anthropic_api_key: ${{ inputs.anthropic-api-key }}
+        claude_code_oauth_token: ${{ inputs.claude-code-oauth-token }}
+        anthropic_federation_rule_id: ${{ inputs.anthropic-federation-rule-id }}
+        anthropic_organization_id: ${{ inputs.anthropic-organization-id }}
+        anthropic_service_account_id: ${{ inputs.anthropic-service-account-id }}
+        anthropic_workspace_id: ${{ inputs.anthropic-workspace-id }}
+        plugin_marketplaces: ${{ steps.setup.outputs.plugins != '' && steps.setup.outputs.marketplace || '' }}
+        plugins: ${{ steps.setup.outputs.plugins }}
+        prompt: ${{ steps.prepare.outputs.prompt }}
+        claude_args: >-
+          ${{ steps.setup.outputs.args }}
+          --allowedTools "${{ steps.setup.outputs.tools }}"
+
+    # claude-code-action takes a pull request's, an issue's and a few
+    # automation events, and refuses every other ("Unsupported event type"):
+    # a push, a merge group, a release. There the same reviewer runs through
+    # its base action, which reads no event. Nothing is lost: outside a pull
+    # request the reviewer answers in its structured output and comments
+    # nowhere.
+    - id: claude-base
+      if: >-
+        steps.prepare.outputs.prompt != '' &&
+        (inputs.review != 'build' || inputs.analysis == 'true' || inputs.gate == 'agent') &&
+        !contains(fromJSON('["pull_request", "pull_request_target", "pull_request_review", "pull_request_review_comment", "issues", "issue_comment", "workflow_dispatch", "repository_dispatch", "schedule", "workflow_run"]'), github.event_name)
+      continue-on-error: true
+      uses: anthropics/claude-code-action/base-action@c0949c50a78c1ec8ce2647db36629b870e715d0c # v1.0.268
+      env:
+        BITBISON_URL: ${{ steps.setup.outputs.plugins != '' && steps.setup.outputs.instance || '' }}
+        BITBISON_TOKEN: ${{ steps.setup.outputs.plugins != '' && inputs.ci-token || '' }}
+        BITBISON_AGENT_SESSION: ${{ steps.setup.outputs.session }}
+      with:
         anthropic_api_key: ${{ inputs.anthropic-api-key }}
         claude_code_oauth_token: ${{ inputs.claude-code-oauth-token }}
         anthropic_federation_rule_id: ${{ inputs.anthropic-federation-rule-id }}
@@ -287,7 +319,7 @@ runs:
         REPOSITORY: ${{ github.repository }}
         PR: ${{ inputs.pull-request }}
         FAIL_ON_UNCOVERED: ${{ inputs.fail-on-uncovered }}
-        NOTES: ${{ steps.claude.outputs.structured_output }}
+        NOTES: ${{ steps.claude.outputs.structured_output || steps.claude-base.outputs.structured_output }}
       run: bash "$GITHUB_ACTION_PATH/summary.sh"
 
     # The build review: the report and the analysis on the job's summary,
@@ -302,8 +334,8 @@ runs:
         CLEAN: ${{ steps.prepare.outputs.clean }}
         ANALYZED: ${{ steps.prepare.outputs.analyzed }}
         REPORT: ${{ steps.prepare.outputs.report }}
-        ANALYSIS: ${{ steps.claude.outputs.structured_output }}
-        CLAUDE: ${{ steps.claude.outcome }}
+        ANALYSIS: ${{ steps.claude.outputs.structured_output || steps.claude-base.outputs.structured_output }}
+        CLAUDE: ${{ steps.claude.outcome != 'skipped' && steps.claude.outcome || steps.claude-base.outcome }}
         DIR: ${{ steps.setup.outputs.dir }}
         GH_TOKEN: ${{ inputs.github-token }}
         REPOSITORY: ${{ github.repository }}
