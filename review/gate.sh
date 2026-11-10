@@ -68,7 +68,9 @@ cell() { jq -r "$1 // \"\" | gsub(\"[\\r\\n]+\"; \" \") | gsub(\"\\\\|\"; \"\\\\
     n=$(jq '.findings | length' <<< "$ANALYSIS")
     for ((i = 0; i < n; i++)); do
       f=$(jq ".findings[$i]" <<< "$ANALYSIS")
+      # A path under the workspace reads as the report gives it: relative.
       subject=$(cell .subject <<< "$f")
+      [ -n "${GITHUB_WORKSPACE:-}" ] && subject=${subject#"$GITHUB_WORKSPACE"/}
       printf '| `%s`%s | %s | %s | %s |\n' "$(cell .rule <<< "$f" | tr -d '`')" \
         "${subject:+ \`${subject//\`/}\`}" \
         "$(jq -r 'if .real_risk then "**yes**" else "no" end' <<< "$f")" \
