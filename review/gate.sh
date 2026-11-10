@@ -39,13 +39,54 @@ decision() {
     echo "**Gate (\`$GATE\`): failed.** ${reason^}."
   fi
 }
+# The page leads with what a reader came for: the gate's decision, the
+# run's verdict and jobs, Claude's sentence on it, the findings, and
+# Claude's verdict and next step for each. What the build did besides (its
+# network, artifacts, dependencies) and the analysis in full are folded
+# under them, so a clean build is a few lines.
+cell() { jq -r "$1 // \"\" | gsub(\"[\\r\\n]+\"; \" \") | gsub(\"\\\\|\"; \"\\\\|\")"; }
 {
-  [ -s "${REPORT:-}" ] && cat "$REPORT"
-  if [ -n "$verdict" ]; then
-    jq -r '.analysis // empty' <<< "$ANALYSIS"
+  if [ -s "${REPORT:-}" ]; then
+    head -n 1 "$REPORT"
+    echo
+    decision
+    # The headline and the jobs: everything before the first section.
+    awk 'NR > 1 { if (/^### /) exit; print }' "$REPORT"
+  else
+    decision
     echo
   fi
-  decision
+  if [ -n "$verdict" ]; then
+    jq -r '.summary // empty' <<< "$ANALYSIS"
+    echo
+  fi
+  [ -s "${REPORT:-}" ] && awk '/^### /{ on = ($0 == "### Findings") } on' "$REPORT"
+  if [ -n "$verdict" ] && jq -e '(.findings // []) | length > 0' > /dev/null 2>&1 <<< "$ANALYSIS"; then
+    printf '%s\n\n' "**Claude's verdict on each open finding**"
+    echo "| Finding | Real risk | Why | Next step |"
+    echo "|---|---|---|---|"
+    n=$(jq '.findings | length' <<< "$ANALYSIS")
+    for ((i = 0; i < n; i++)); do
+      f=$(jq ".findings[$i]" <<< "$ANALYSIS")
+      subject=$(cell .subject <<< "$f")
+      printf '| `%s`%s | %s | %s | %s |\n' "$(cell .rule <<< "$f" | tr -d '`')" \
+        "${subject:+ \`${subject//\`/}\`}" \
+        "$(jq -r 'if .real_risk then "**yes**" else "no" end' <<< "$f")" \
+        "$(cell .reason <<< "$f")" "$(cell .next <<< "$f")"
+    done
+    echo
+  fi
+  if [ -s "${REPORT:-}" ] && grep -q '^### ' "$REPORT" &&
+    [ -n "$(awk '/^### /{ on = ($0 != "### Findings") } on' "$REPORT")" ]; then
+    printf '<details><summary>What the build did: network, artifacts, dependencies</summary>\n\n'
+    awk '/^### /{ on = ($0 != "### Findings") } on' "$REPORT"
+    printf '\n</details>\n\n'
+  fi
+  if [ -n "$verdict" ] && [ -n "$(jq -r '.analysis // empty' <<< "$ANALYSIS")" ]; then
+    printf "<details><summary>Claude's analysis in full</summary>\n\n"
+    jq -r '.analysis' <<< "$ANALYSIS"
+    printf '\n</details>\n'
+  fi
 } > "$DIR/gate.md"
 cat "$DIR/gate.md" >> "$summary"
 
