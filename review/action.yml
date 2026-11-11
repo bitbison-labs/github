@@ -64,8 +64,20 @@ inputs:
   model:
     description: 'The Claude model to review with. Defaults to claude-code-action''s.'
     required: false
+  fail-on:
+    description: >-
+      The dependency review: what fails the job. 'never' (the default):
+      nothing, the job only reports. 'denied': a change your organization
+      has said no to (a rule denies the release, yours or the built-in one
+      for a release reviewed or reported as malicious; an approved audit
+      denies it; its grant was revoked), while a change that waits on a
+      person passes. 'uncovered': any change no grant covers. Whatever it
+      is, the job's annotation is an error for a denied change, a warning
+      for one that waits and a notice when all are covered.
+    required: false
+    default: 'never'
   fail-on-uncovered:
-    description: 'The dependency review fails the job when a change is left uncovered.'
+    description: "From before fail-on: 'true' is fail-on: uncovered."
     required: false
     default: 'false'
   vulnerabilities:
@@ -158,6 +170,9 @@ outputs:
   uncovered:
     description: 'The dependency review: how many changes no grant covers.'
     value: ${{ steps.summary.outputs.uncovered }}
+  denied:
+    description: 'The dependency review: how many of the uncovered changes your organization has said no to.'
+    value: ${{ steps.summary.outputs.denied }}
   passed:
     description: 'The build review: whether the gate passed the build.'
     value: ${{ steps.gate.outputs.passed }}
@@ -318,6 +333,7 @@ runs:
         GH_TOKEN: ${{ inputs.github-token }}
         REPOSITORY: ${{ github.repository }}
         PR: ${{ inputs.pull-request }}
+        FAIL_ON: ${{ inputs.fail-on }}
         FAIL_ON_UNCOVERED: ${{ inputs.fail-on-uncovered }}
         NOTES: ${{ steps.claude.outputs.structured_output || steps.claude-base.outputs.structured_output }}
       run: bash "$GITHUB_ACTION_PATH/summary.sh"

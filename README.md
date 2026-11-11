@@ -124,8 +124,25 @@ Under `with:`:
 
 - `dependency-grants: false`: the dependency review only reads and requests
   nothing.
-- `fail-on-uncovered: true`: the dependency review fails the job when a
-  change is left uncovered.
+- `fail-on`: what fails the dependency review's job, so what blocks a merge
+  when the job is a required check. By default nothing does.
+  - `never` (the default): the job only reports.
+  - `denied`: a change your organization has said no to. A rule denies the
+    release (your own `deny` rule, or the built-in one for a release
+    reviewed or reported as malicious), an approved audit denies it, or a
+    person revoked its grant. Nothing an agent does lifts these. A change
+    that waits on a person (an audit or a request not yet decided, a
+    registry review a person may override) passes.
+  - `uncovered`: any change no grant covers, the waiting ones included.
+
+  Whatever `fail-on` is, the review says which of three states a change is
+  in, in the summary and as the job's annotation: red, an error, for a
+  denied change; amber, a warning, for one that waits on a person; green
+  when everything is covered. With `fail-on: denied`, red blocks the merge
+  and amber does not. To make something else red, such as a review's
+  conclusion or an advisory, add a `deny` rule for it in Bitbison: the
+  workflow follows your organization's rules. `fail-on-uncovered: true`,
+  from before `fail-on`, is `fail-on: uncovered`.
 - `vulnerabilities: high` (or `critical`, `medium`, `low`): Claude also
   judges whether the advisories of the direct dependencies a pull request
   or a push adds or upgrades, at that severity or above, are relevant to your code

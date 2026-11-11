@@ -6,7 +6,7 @@ name: Bitbison review
 # delete and workflow_dispatch for the state of each branch and tag
 # (track), and workflow_run of the workflows that build under Bitbison (or
 # every workflow) for the build review. Neither holds up the change or
-# fails it.
+# fails it, unless fail-on asks the dependency review to.
 
 on:
   workflow_call:
@@ -27,8 +27,18 @@ on:
         type: boolean
         required: false
         default: true
+      fail-on:
+        description: >-
+          What fails the dependency review's job: never (the default), it
+          only reports; denied, a change your organization has said no to,
+          by a rule (the built-in one for malicious releases among them), an
+          approved audit or a revoked grant, while a change that waits on a
+          person passes; uncovered, any change no grant covers.
+        type: string
+        required: false
+        default: 'never'
       fail-on-uncovered:
-        description: 'The dependency review fails the job when a change is left uncovered; by default it only reports.'
+        description: 'From before fail-on: true is fail-on: uncovered.'
         type: boolean
         required: false
         default: false
@@ -114,6 +124,7 @@ jobs:
         with:
           review: dependencies
           grants: ${{ inputs.dependency-grants }}
+          fail-on: ${{ inputs.fail-on }}
           fail-on-uncovered: ${{ inputs.fail-on-uncovered }}
           vulnerabilities: ${{ inputs.vulnerabilities }}
           track: ${{ inputs.track }}
