@@ -30,9 +30,10 @@ Claude reviews your pull requests and pushes with
   what is still uncovered, deeper (the registry's analysis and capture of the
   release, alternatives your organization already uses) and comments on it.
   One summary comment, kept up to date, says where every change stands and
-  what a person must still decide. A push has no pull request to comment
-  on: the summary, with Claude's notes under it, is on the job's summary,
-  and the job's annotation says whether a person has something to decide.
+  what a person must still decide. For a push, the summary and Claude's
+  notes appear in the job summary. For both pull requests and pushes, the
+  job annotation reports whether changes are denied, waiting on a person,
+  or covered.
 - **Build**, once a build has run under the build integration above and
   been analyzed: a report of what the build itself did (its verdict
   against the default branch's, its findings, the hosts it connected to,
@@ -41,12 +42,15 @@ Claude reviews your pull requests and pushes with
   gate between a build and what depends on it, it can also stop a publish
   (below).
 
-Neither review holds up a pull request or fails it unless you ask. Both run
-in jobs of their own, never on your build's runner, and only they hold the
-Claude credential and the Bitbison CI token. The review's instructions come
-from your Bitbison instance, which keeps them current; Claude and the
-Bitbison client run on your runner, with your Claude credential. Pull
-requests from forks are not reviewed.
+Both reviews only report by default. For the dependency review, this is
+`fail-on: never`; the `fail-on` option below controls when its job fails. A
+failed job blocks a merge only when it is a required check.
+
+Both run in jobs of their own, never on your build's runner, and only they
+hold the Claude credential and the Bitbison CI token. The review's
+instructions come from your Bitbison instance, which keeps them current;
+Claude and the Bitbison client run on your runner, with your Claude
+credential. Pull requests from forks are not reviewed.
 
 ### Setup
 
@@ -124,25 +128,27 @@ Under `with:`:
 
 - `dependency-grants: false`: the dependency review only reads and requests
   nothing.
-- `fail-on`: what fails the dependency review's job, so what blocks a merge
-  when the job is a required check. By default nothing does.
-  - `never` (the default): the job only reports.
-  - `denied`: a change your organization has said no to. A rule denies the
-    release (your own `deny` rule, or the built-in one for a release
-    reviewed or reported as malicious), an approved audit denies it, or a
-    person revoked its grant. Nothing an agent does lifts these. A change
-    that waits on a person (an audit or a request not yet decided, a
-    registry review a person may override) passes.
-  - `uncovered`: any change no grant covers, the waiting ones included.
+- `fail-on`: when the dependency review job fails. A failed job blocks a
+  merge only when it is a required check.
+  - `never` (default): only report.
+  - `denied`: fail only on a denied change.
+  - `uncovered`: fail on any change without a grant, including denied
+    changes and changes waiting on a person.
 
-  Whatever `fail-on` is, the review says which of three states a change is
-  in, in the summary and as the job's annotation: red, an error, for a
-  denied change; amber, a warning, for one that waits on a person; green
-  when everything is covered. With `fail-on: denied`, red blocks the merge
-  and amber does not. To make something else red, such as a review's
-  conclusion or an advisory, add a `deny` rule for it in Bitbison: the
-  workflow follows your organization's rules. `fail-on-uncovered: true`,
-  from before `fail-on`, is `fail-on: uncovered`.
+  Regardless of `fail-on`, the review reports one of three states in the
+  summary comment (the job summary for a push) and the job annotation:
+  - **Denied** (error annotation): your organization has said no to at
+    least one change, through a `deny` rule, the built-in rule for a
+    release reviewed or reported as malicious, an approved deny audit, or a
+    revoked grant.
+  - **Waiting on a person** (warning annotation): no change is denied, but
+    at least one has no grant yet.
+  - **Covered** (notice annotation): every change has a grant.
+
+  An agent cannot lift a denial. To deny changes based on a review's
+  conclusion or an advisory, add a `deny` rule in Bitbison.
+
+  `fail-on-uncovered: true` is the old spelling of `fail-on: uncovered`.
 - `vulnerabilities: high` (or `critical`, `medium`, `low`): Claude also
   judges whether the advisories of the direct dependencies a pull request
   or a push adds or upgrades, at that severity or above, are relevant to your code
