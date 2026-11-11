@@ -104,7 +104,7 @@ jobs:
           persist-credentials: false
           fetch-depth: 2
       - id: review
-        uses: bitbison-labs/github/review@master
+        uses: bitbison-labs/github/review@2866f7f2d56533ff16f41d9b1a880791c3cbe709 # v1.0.0
         with:
           review: build
           gate: ${{ inputs.gate }}
