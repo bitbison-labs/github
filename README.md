@@ -85,9 +85,11 @@ jobs:
       contents: read
       pull-requests: write
       id-token: write
-    uses: bitbison-labs/github/.github/workflows/review.yml@<commit>
+    uses: bitbison-labs/github/.github/workflows/review.yml@<release commit> # vX.Y.Z
     secrets: inherit
 ```
+
+Pin a release ([Versions](#versions), below).
 
 To review each push to the default branch as well, add `push`. Another
 branch's changes are reviewed on its pull request, and a push that changes
@@ -121,6 +123,41 @@ The build review follows every workflow and says within a minute when a run
 had no Bitbison build; name the workflows that build under Bitbison in place
 of `"**"` to follow those alone. GitHub runs a `workflow_run` workflow from
 the default branch, so the build review starts once this file is merged.
+
+### Versions
+
+Releases are tagged `vX.Y.Z` and listed under
+[Releases](https://github.com/bitbison-labs/github/releases). Three ways to
+name one, for the build integration (`bitbison-labs/github@...`), the
+reusable workflows and the review action alike:
+
+- **A release's commit, with its version in a comment** (recommended):
+  `@<release commit> # v1.2.3`. Nothing changes until you change the pin.
+  In a release, the reusable workflows call the review action at that
+  release's commit, not at a branch, so the one pin covers everything of
+  this repository that they run. Dependabot raises a pull request for each
+  new release and keeps the comment in step:
+
+  ```yaml
+  # .github/dependabot.yml
+  version: 2
+  updates:
+    - package-ecosystem: github-actions
+      directory: /
+      schedule:
+        interval: weekly
+  ```
+
+- **The major tag**, `@v1`: it moves to each new `v1` release, so you get
+  fixes without a pull request, and whoever can move the tag decides what
+  runs.
+- **`@master`**: the development branch. It changes without notice. A
+  commit of it that is not a release still calls the review action at
+  `master`, so pinning such a commit does not pin the review.
+
+A pin covers this repository. The review's instructions, and the Bitbison
+plugin and client the review runs, come from your Bitbison instance, which
+keeps them current. The other actions the review uses are pinned by commit.
 
 ### Options
 
@@ -186,7 +223,7 @@ jobs:
       pull-requests: read
       checks: write
       id-token: write
-    uses: bitbison-labs/github/.github/workflows/gate.yml@<commit>
+    uses: bitbison-labs/github/.github/workflows/gate.yml@<release commit> # vX.Y.Z
     with:
       gate: agent
     secrets: inherit
