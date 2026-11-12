@@ -196,6 +196,9 @@ case $REVIEW in
     schema='{"type":"object","properties":{"decision":{"type":"string","enum":["real_risk","no_real_risk"]},"summary":{"type":"string"},"findings":{"type":"array","items":{"type":"object","properties":{"rule":{"type":"string"},"subject":{"type":"string"},"real_risk":{"type":"boolean"},"reason":{"type":"string"},"next":{"type":"string"}},"required":["rule","real_risk","reason","next"]}},"analysis":{"type":"string"}},"required":["decision","summary","findings","analysis"]}'
     ;;
 esac
+# A prompt too long for the step that runs Claude is left in this file, and
+# the reviewer reads it from there (prompt.sh).
+tools="$tools,Read(/$dir/prompt.md)"
 plugins=""
 mcp=""
 
