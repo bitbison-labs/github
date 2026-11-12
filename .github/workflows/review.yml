@@ -120,7 +120,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.head_ref }}
-      - uses: bitbison-labs/github/review@master
+      - uses: bitbison-labs/github/review@677cefcf5a5eec97c92063316fd2417b3a945f03 # v1.0.1
         with:
           review: dependencies
           grants: ${{ inputs.dependency-grants }}
@@ -159,7 +159,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: bitbison-labs/github/review@master
+      - uses: bitbison-labs/github/review@677cefcf5a5eec97c92063316fd2417b3a945f03 # v1.0.1
         with:
           review: build
           instance: ${{ inputs.instance || secrets.BITBISON_INSTANCE }}
